@@ -72,8 +72,14 @@ client.on('message', async (msg) => {
         }
 
     } catch (error) {
-        console.error(`❌ Erro ao comunicar com a API Python:`, error.message);
-        console.log(`Verifique se o servidor FastAPI está rodando em http://localhost:8000`);
+        console.error('❌ Erro ao comunicar com a API Python:', error.message || error.toString());
+        if (error.response) {
+            console.error('--- Resposta da API ---');
+            console.error('Status:', error.response.status);
+            console.error('Dados:', error.response.data);
+        }
+        console.error(error.stack || error);
+        console.log('Verifique se o servidor FastAPI está rodando em http://127.0.0.1:8000');
     }
 });
 
