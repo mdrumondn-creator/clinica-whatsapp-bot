@@ -7,6 +7,13 @@ const axios = require('axios');
 const seenMessageIds = new Set();
 setInterval(() => seenMessageIds.clear(), 1000 * 60 * 5);
 
+// Segurança cliente: kill-switch e rate-limit
+const ALLOW_SEND = process.env.ALLOW_SEND === 'true';
+const ALLOW_RESTART = process.env.ALLOW_RESTART === 'true';
+const MAX_REPLIES_PER_MINUTE = parseInt(process.env.MAX_REPLIES_PER_MINUTE) || 120;
+let repliesThisMinute = 0;
+setInterval(() => { repliesThisMinute = 0; }, 60 * 1000);
+
 // Inicializa o cliente do WhatsApp (salva a sessão localmente para não pedir QR Code toda hora)
 const client = new Client({
     puppeteer: {
@@ -19,6 +26,10 @@ const client = new Client({
 
 // Recuperação automática: reinicia o client em caso de exceções não tratadas
 async function restartClient(reason) {
+    if (!ALLOW_RESTART) {
+        console.warn('Restart automático desabilitado (ALLOW_RESTART!=true).');
+        return;
+    }
     console.error('>>> Reiniciando client por motivo:', reason);
     try {
         await client.destroy();
@@ -103,24 +114,52 @@ client.on('message', async (msg) => {
             mensagem: texto,
             api_message_id: message_id
         });
-
         // O Python processa as regras de negócio e devolve o texto da resposta
-        if (response.data && response.data.resposta) {
+        if (response.data) {
+            // Se o backend indicar que o envio está desabilitado ou que não há sessão/paciente, respeite
+            if (response.data.status) {
+                const s = response.data.status;
+                if (['sending_disabled', 'no_session_or_patient', 'ignored_outbound'].includes(s)) {
+                    console.log(`[ℹ️ Backend sinalizou: ${s}] Não será enviada resposta para ${telefone}`);
+                    return;
+                }
+            }
+
+            if (!response.data.resposta) {
+                // Nada para responder
+                return;
+            }
+
+            if (!ALLOW_SEND) {
+                console.warn('Envio de respostas está desabilitado no cliente (ALLOW_SEND!=true).');
+                return;
+            }
+
+            if (repliesThisMinute >= MAX_REPLIES_PER_MINUTE) {
+                console.warn('Rate limit atingido. Pulando envio para evitar flood.');
+                return;
+            }
+
             const textoResposta = response.data.resposta;
             console.log(`[🤖 Preparando Resposta] ${textoResposta}`);
-            
+
             // 1. Pega a conversa e mostra o status "digitando..." no celular do paciente
             const chat = await msg.getChat();
             await chat.sendStateTyping();
-            
+
             // 2. Calcula um atraso realista: 2 segundos + 50ms por cada letra do texto
-            const delayHumanizado = Math.max(2000, textoResposta.length * 50); 
-            
+            const delayHumanizado = Math.max(2000, textoResposta.length * 50);
+
             // 3. Espera o tempo, envia a mensagem e limpa o "digitando..."
             setTimeout(async () => {
-                await msg.reply(textoResposta);
-                await chat.clearState();
-                console.log(`[✅ Enviado] Após ${delayHumanizado}ms`);
+                try {
+                    await msg.reply(textoResposta);
+                    repliesThisMinute += 1;
+                    await chat.clearState();
+                    console.log(`[✅ Enviado] Após ${delayHumanizado}ms`);
+                } catch (e) {
+                    console.error('Erro ao enviar resposta:', e && e.message ? e.message : e);
+                }
             }, delayHumanizado);
         }
 
