@@ -4,11 +4,15 @@ const path = require('path');
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const axios = require('axios');
 
-// Inicializa o cliente do WhatsApp (salva a sessÃ£o localmente para nÃ£o pedir QR Code toda hora)
+const seenMessageIds = new Set();
+setInterval(() => seenMessageIds.clear(), 1000 * 60 * 5);
+
+// Inicializa o cliente do WhatsApp (salva a sessão localmente para não pedir QR Code toda hora)
 const client = new Client({
     puppeteer: {
         headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
+        protocolTimeout: 120000
     },
     authStrategy: new LocalAuth()
 });
@@ -71,8 +75,9 @@ client.on('ready', () => {
 
 // Listener: Quando receber uma mensagem
 client.on('message', async (msg) => {
-    // Ignorar status, mensagens do bot, mensagens de grupos e mensagens sem texto
+    // Ignorar status, mensagens do bot, mensagens de grupos e mensagens de tipo não suportado
     if (msg.isStatus || msg.fromMe || msg.author || msg.from.includes('@g.us')) return;
+    if (!['chat', 'text', 'extendedTextMessage'].includes(msg.type)) return;
 
     const telefone = msg.from.replace('@c.us', ''); // Limpa o ID do WhatsApp
     const texto = msg.body;
@@ -82,6 +87,12 @@ client.on('message', async (msg) => {
         console.log(`[⚠️ Ignorado] mensagem sem texto de: ${telefone} (tipo: ${msg.type})`);
         return;
     }
+
+    if (seenMessageIds.has(message_id)) {
+        console.log(`[⚠️ Ignorado] mensagem duplicada de: ${telefone} id: ${message_id}`);
+        return;
+    }
+    seenMessageIds.add(message_id);
 
     console.log(`[📩 Nova Mensagem] De: ${telefone} | Texto: "${texto}"`);
 
