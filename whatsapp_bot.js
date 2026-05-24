@@ -7,7 +7,7 @@ const axios = require('axios');
 // Inicializa o cliente do WhatsApp (salva a sessÃ£o localmente para nÃ£o pedir QR Code toda hora)
 const client = new Client({
     puppeteer: {
-        headless: false,
+        headless: true,
         args: ['--no-sandbox', '--disable-setuid-sandbox']
     },
     authStrategy: new LocalAuth()
@@ -71,12 +71,17 @@ client.on('ready', () => {
 
 // Listener: Quando receber uma mensagem
 client.on('message', async (msg) => {
-    // Ignorar status e mensagens de grupos
-    if (msg.isStatus || msg.author || msg.from.includes('@g.us')) return;
+    // Ignorar status, mensagens do bot, mensagens de grupos e mensagens sem texto
+    if (msg.isStatus || msg.fromMe || msg.author || msg.from.includes('@g.us')) return;
 
     const telefone = msg.from.replace('@c.us', ''); // Limpa o ID do WhatsApp
     const texto = msg.body;
     const message_id = msg.id._serialized;
+
+    if (!texto || !texto.trim()) {
+        console.log(`[⚠️ Ignorado] mensagem sem texto de: ${telefone} (tipo: ${msg.type})`);
+        return;
+    }
 
     console.log(`[📩 Nova Mensagem] De: ${telefone} | Texto: "${texto}"`);
 
