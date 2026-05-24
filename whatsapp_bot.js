@@ -45,7 +45,7 @@ client.on('message', async (msg) => {
 
     try {
         // Envia a mensagem via Webhook (POST) para o nosso backend em Python (FastAPI)
-        const response = await axios.post('http://localhost:8000/webhook', {
+        const response = await axios.post('http://127.0.0.1:8000/webhook', {
             telefone: telefone,
             mensagem: texto,
             api_message_id: message_id
