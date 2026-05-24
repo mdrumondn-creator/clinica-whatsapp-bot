@@ -13,6 +13,39 @@ const client = new Client({
     authStrategy: new LocalAuth()
 });
 
+// Recuperação automática: reinicia o client em caso de exceções não tratadas
+async function restartClient(reason) {
+    console.error('>>> Reiniciando client por motivo:', reason);
+    try {
+        await client.destroy();
+    } catch (e) {
+        console.error('Erro ao destruir client:', e && e.message ? e.message : e);
+    }
+    // aguarda um pouco antes de reiniciar
+    setTimeout(() => {
+        try {
+            client.initialize();
+        } catch (e) {
+            console.error('Falha ao reiniciar client:', e && e.message ? e.message : e);
+        }
+    }, 2000);
+}
+
+process.on('unhandledRejection', (reason, p) => {
+    console.error('Unhandled Rejection at:', p, 'reason:', reason);
+    restartClient('unhandledRejection');
+});
+
+process.on('uncaughtException', (err) => {
+    console.error('Uncaught Exception:', err && err.stack ? err.stack : err);
+    restartClient('uncaughtException');
+});
+
+client.on('disconnected', (reason) => {
+    console.warn('Client desconectado:', reason);
+    restartClient('disconnected');
+});
+
 // Quando o WhatsApp pedir autenticaÃ§Ã£o, gera o QR Code no terminal
 client.on('qr', async (qr) => {
     console.log('\n======================================================');
