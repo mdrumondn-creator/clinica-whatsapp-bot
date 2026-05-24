@@ -168,15 +168,15 @@ def agendar(conn, telefone, id_disponibilidade):
 # =========================================================
 def processar_fluxo(conn, telefone, mensagem, etapa_atual):
     if etapa_atual == "inicio":
-        return "Olá! Digite:\n1 - Agendar consulta\n2 - Falar com atendente", "menu"
+        return "Oiê! Tudo bem? 💙 Sou a assistente virtual da Clínica.\nComo posso te ajudar hoje?\n\n1️⃣ Gostaria de agendar uma consulta\n2️⃣ Preciso falar com a recepção", "menu"
 
     if etapa_atual == "menu":
         if mensagem == "1":
-            return "Qual ID da disponibilidade deseja?", "agendar"
+            return "Perfeito! Por favor, digite o número da sua carteirinha ou o ID do horário desejado:", "agendar"
         elif mensagem == "2":
-            return "Encaminhando para atendente.", "fim"
+            return "Certo, aguarde só um instante. Já vou chamar uma de nossas atendentes para falar com você! 👩‍⚕️", "fim"
         else:
-            return "Opção inválida.", "menu"
+            return "Ops, não entendi essa opção. Digite 1 para Agendar ou 2 para Falar com a recepção.", "menu"
 
     if etapa_atual == "agendar":
         try:
@@ -184,13 +184,13 @@ def processar_fluxo(conn, telefone, mensagem, etapa_atual):
             sucesso = agendar(conn, telefone, disp_id)
 
             if sucesso:
-                return "Consulta agendada com sucesso!", "fim"
+                return "✅ Tudo certo! Sua consulta foi agendada com sucesso. Te esperamos lá!", "fim"
             else:
-                return "Horário indisponível ou paciente não cadastrado.", "menu"
+                return "❌ Poxa, parece que esse horário já foi ocupado ou não achei seu cadastro. Vamos tentar outro horário?", "menu"
         except ValueError:
-            return "Informe um número válido.", "agendar"
+            return "Por favor, digite apenas números válidos do horário.", "agendar"
 
-    return "Fluxo encerrado.", "fim"
+    return "Seu atendimento foi finalizado. Qualquer coisa é só chamar! 👋", "fim"
 
 
 # =========================================================

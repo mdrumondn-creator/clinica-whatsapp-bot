@@ -1,18 +1,29 @@
 const qrcode = require('qrcode-terminal');
+const QRCode = require('qrcode');
+const path = require('path');
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const axios = require('axios');
 
-// Inicializa o cliente do WhatsApp (salva a sessão localmente para não pedir QR Code toda hora)
+// Inicializa o cliente do WhatsApp (salva a sessÃ£o localmente para nÃ£o pedir QR Code toda hora)
 const client = new Client({
     authStrategy: new LocalAuth()
 });
 
-// Quando o WhatsApp pedir autenticação, gera o QR Code no terminal
-client.on('qr', (qr) => {
+// Quando o WhatsApp pedir autenticaÃ§Ã£o, gera o QR Code no terminal
+client.on('qr', async (qr) => {
     console.log('\n======================================================');
-    console.log('🤖 Escaneie o QR Code abaixo com o WhatsApp da Clínica');
+    console.log('ðŸ¤– Escaneie o QR Code abaixo com o WhatsApp da ClÃnica');
     console.log('======================================================\n');
     qrcode.generate(qr, { small: true });
+
+    const qrImagePath = path.resolve(__dirname, 'whatsapp_qr.png');
+    try {
+        await QRCode.toFile(qrImagePath, qr, { width: 240 });
+        console.log(`\nQR salvo como imagem em: ${qrImagePath}`);
+        console.log('Abra o arquivo se o QR no terminal estiver grande demais.\n');
+    } catch (err) {
+        console.error('Erro ao gerar QR Code como imagem:', err);
+    }
 });
 
 // Quando conectar com sucesso
@@ -42,8 +53,22 @@ client.on('message', async (msg) => {
 
         // O Python processa as regras de negócio e devolve o texto da resposta
         if (response.data && response.data.resposta) {
-            console.log(`[🤖 Resposta Bot] ${response.data.resposta}`);
-            msg.reply(response.data.resposta);
+            const textoResposta = response.data.resposta;
+            console.log(`[🤖 Preparando Resposta] ${textoResposta}`);
+            
+            // 1. Pega a conversa e mostra o status "digitando..." no celular do paciente
+            const chat = await msg.getChat();
+            await chat.sendStateTyping();
+            
+            // 2. Calcula um atraso realista: 2 segundos + 50ms por cada letra do texto
+            const delayHumanizado = Math.max(2000, textoResposta.length * 50); 
+            
+            // 3. Espera o tempo, envia a mensagem e limpa o "digitando..."
+            setTimeout(async () => {
+                await msg.reply(textoResposta);
+                await chat.clearState();
+                console.log(`[✅ Enviado] Após ${delayHumanizado}ms`);
+            }, delayHumanizado);
         }
 
     } catch (error) {
