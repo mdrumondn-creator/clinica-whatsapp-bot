@@ -6,6 +6,10 @@ const axios = require('axios');
 
 // Inicializa o cliente do WhatsApp (salva a sessÃ£o localmente para nÃ£o pedir QR Code toda hora)
 const client = new Client({
+    puppeteer: {
+        headless: false,
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
+    },
     authStrategy: new LocalAuth()
 });
 
