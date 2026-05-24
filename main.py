@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from psycopg2 import pool
 import psycopg2.extras
 import json
+import uuid
 import logging
 import os
 from typing import Optional
@@ -118,6 +119,14 @@ def get_or_create_session(conn, telefone):
 
 
 def create_session_for_intent(conn, telefone):
+    def write_audit(conn, id_registro, tabela, acao, dados_novos):
+        with conn.cursor() as acur:
+            acur.execute("""
+                INSERT INTO auditoria (id_registro, tabela, acao, dados_novos)
+                VALUES (%s, %s, %s, %s::jsonb)
+            """, (id_registro, tabela, acao, json.dumps(dados_novos)))
+        conn.commit()
+
     with conn.cursor() as cur:
         contexto_inicial = json.dumps({"etapa": "pedir_cpf"})
         cur.execute("""
@@ -127,6 +136,13 @@ def create_session_for_intent(conn, telefone):
         """, (telefone, contexto_inicial))
         id_sessao = cur.fetchone()[0]
         conn.commit()
+
+    # Registrar auditoria para investigação — sessão criada por intenção de agendamento
+    write_audit(conn, id_sessao, 'sessao_chatbot', 'CREATE_INTENT_SESSION', {
+        'telefone': telefone,
+        'contexto': {'etapa': 'pedir_cpf'}
+    })
+
     return id_sessao, "pedir_cpf"
 
 
@@ -310,6 +326,36 @@ def webhook(msg: Mensagem):
         resposta, nova_etapa = processar_fluxo(
             conn, msg.telefone, msg.mensagem, etapa_atual
         )
+
+        # Registra tentativa de envio no log de mensagens (saída) e na auditoria
+        try:
+            out_api_id = f"srv-{uuid.uuid4().hex}"
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO whatsapp_mensagem (
+                        telefone_remetente,
+                        mensagem,
+                        direcao,
+                        api_message_id,
+                        status_envio
+                    )
+                    VALUES (%s, %s, 'SAIDA', %s, 'ENVIADO')
+                """, (msg.telefone, resposta, out_api_id))
+                conn.commit()
+
+            # Auditoria do envio
+            with conn.cursor() as acur:
+                acur.execute("""
+                    INSERT INTO auditoria (id_registro, tabela, acao, dados_novos)
+                    VALUES (%s, %s, %s, %s::jsonb)
+                """, (out_api_id, 'whatsapp_mensagem', 'OUTGOING_SEND', json.dumps({
+                    'telefone': msg.telefone,
+                    'api_message_id': out_api_id,
+                    'mensagem': resposta
+                })))
+                conn.commit()
+        except Exception as e:
+            logger.error(f"Falha ao registrar mensagem de saída/auditoria: {e}")
 
         # Atualiza a etapa no JSONB
         with conn.cursor() as cur:
