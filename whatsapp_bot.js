@@ -4,11 +4,12 @@ const path = require('path');
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const axios = require('axios');
 
+const startupTime = Math.floor(Date.now() / 1000);
 const seenMessageIds = new Set();
 setInterval(() => seenMessageIds.clear(), 1000 * 60 * 5);
 
 // Segurança cliente: kill-switch e rate-limit
-const ALLOW_SEND = process.env.ALLOW_SEND === 'true';
+const ALLOW_SEND = process.env.ALLOW_SEND !== 'false';
 const ALLOW_RESTART = process.env.ALLOW_RESTART === 'true';
 const MAX_REPLIES_PER_MINUTE = parseInt(process.env.MAX_REPLIES_PER_MINUTE) || 120;
 let repliesThisMinute = 0;
@@ -86,8 +87,11 @@ client.on('ready', () => {
 
 // Listener: Quando receber uma mensagem
 client.on('message', async (msg) => {
-    // Ignorar status, mensagens do bot, mensagens de grupos e mensagens de tipo não suportado
-    if (msg.isStatus || msg.fromMe || msg.author || msg.from.includes('@g.us')) return;
+    // Ignorar mensagens antigas (carregadas no momento em que o bot liga)
+    if (msg.timestamp < startupTime) return;
+
+    // Ignorar status, mensagens do bot, mensagens de grupos, listas de transmissão e mensagens de tipo não suportado
+    if (msg.isStatus || msg.fromMe || msg.author || msg.from.includes('@g.us') || msg.from.includes('@broadcast')) return;
     if (!['chat', 'text', 'extendedTextMessage'].includes(msg.type)) return;
 
     const telefone = msg.from.replace('@c.us', ''); // Limpa o ID do WhatsApp
@@ -153,7 +157,14 @@ client.on('message', async (msg) => {
             // 3. Espera o tempo, envia a mensagem e limpa o "digitando..."
             setTimeout(async () => {
                 try {
-                    await msg.reply(textoResposta);
+                    if (response.data.botoes && response.data.botoes.length > 0) {
+                        const { Buttons } = require('whatsapp-web.js');
+                        const btnArray = response.data.botoes.map(b => ({body: b}));
+                        const buttonMsg = new Buttons(textoResposta, btnArray, 'Clínica Médica', '');
+                        await client.sendMessage(msg.from, buttonMsg);
+                    } else {
+                        await msg.reply(textoResposta);
+                    }
                     repliesThisMinute += 1;
                     await chat.clearState();
                     console.log(`[✅ Enviado] Após ${delayHumanizado}ms`);

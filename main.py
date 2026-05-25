@@ -128,7 +128,7 @@ def create_session_for_intent(conn, telefone):
         conn.commit()
 
     with conn.cursor() as cur:
-        contexto_inicial = json.dumps({"etapa": "pedir_cpf"})
+        contexto_inicial = json.dumps({"etapa": "inicio_agendamento"})
         cur.execute("""
             INSERT INTO sessao_chatbot (telefone, estado_atual, contexto_json)
             VALUES (%s, 'ABERTA', %s)
@@ -140,10 +140,10 @@ def create_session_for_intent(conn, telefone):
     # Registrar auditoria para investigação — sessão criada por intenção de agendamento
     write_audit(conn, id_sessao, 'sessao_chatbot', 'CREATE_INTENT_SESSION', {
         'telefone': telefone,
-        'contexto': {'etapa': 'pedir_cpf'}
+        'contexto': {'etapa': 'inicio_agendamento'}
     })
 
-    return id_sessao, "pedir_cpf"
+    return id_sessao, "inicio_agendamento"
 
 
 def is_scheduling_intent(texto: str) -> bool:
@@ -151,8 +151,7 @@ def is_scheduling_intent(texto: str) -> bool:
         return False
     t = texto.lower()
     keywords = [
-        'agend', 'agendar', 'agendado', 'agendada', 'quero agendar', 'marcar', '1',
-        'confirm', 'confirmar', 'confirmado'
+        'agend', 'marcar', 'consulta', 'horario', 'horário'
     ]
     for k in keywords:
         if k in t:
@@ -235,6 +234,23 @@ def agendar(conn, telefone, id_disponibilidade):
 # FLUXO SIMPLES CHATBOT
 # =========================================================
 def processar_fluxo(conn, telefone, mensagem, etapa_atual):
+    if etapa_atual == "inicio_agendamento":
+        return (
+            "Para prosseguir com seu atendimento, precisamos de alguns dados.\n\n"
+            "🔒 *Em conformidade com a Lei nº 13.709 – Lei Geral de Proteção de Dados Pessoais (LGPD)*, será necessário o tratamento de seus dados pessoais para finalidade exclusiva de identificação, visando fornecer o atendimento adequado e aprimorar nossos serviços e sua experiência.\n\n"
+            "🔗 Leia a lei na íntegra: https://www.planalto.gov.br/ccivil_03/_ato2015-2018/2018/lei/l13709.htm\n\n"
+            "Você aceita os termos descritos no link e concorda com o tratamento dos seus dados?"
+        ), "validar_lgpd", ["Concordo", "Não Concordo"]
+
+    if etapa_atual == "validar_lgpd":
+        resp = str(mensagem).strip().lower()
+        if resp in ["1", "concordo"]:
+            return "Obrigado por confirmar! Por favor, digite seu *CPF* (somente números) ou número da carteirinha:", "pedir_cpf"
+        elif resp in ["2", "não concordo", "nao concordo"]:
+            return "Entendemos perfeitamente. Como precisamos dos dados para agendamento, seu atendimento foi encerrado. A clínica agradece o contato e estamos de portas abertas! 👋", "fim"
+        else:
+            return "Por favor, responda com Concordo ou Não Concordo.", "validar_lgpd"
+
     # Etapa para coleta de CPF antes de permitir agendamento
     if etapa_atual == "pedir_cpf":
         texto = (mensagem or '').strip()
@@ -263,17 +279,25 @@ def processar_fluxo(conn, telefone, mensagem, etapa_atual):
             """, (id_paciente, json.dumps({"etapa": "inicio"}), telefone))
             conn.commit()
 
-        return "Identificação confirmada. " + processar_fluxo(conn, telefone, mensagem, "inicio")[0], "inicio"
+        resultado_inicio = processar_fluxo(conn, telefone, mensagem, "inicio")
+        resposta_inicio = resultado_inicio[0]
+        botoes_inicio = resultado_inicio[2] if len(resultado_inicio) == 3 else []
+        return "Identificação confirmada. " + resposta_inicio, "inicio", botoes_inicio
+
     if etapa_atual == "inicio":
-        return "Oiê! Tudo bem? 💙 Sou a assistente virtual da Clínica.\nComo posso te ajudar hoje?\n\n1️⃣ Gostaria de agendar uma consulta\n2️⃣ Preciso falar com a recepção", "menu"
+        return (
+            "Oiê! Tudo bem? 💙 Sou a assistente virtual da Clínica.\n"
+            "Como posso te ajudar hoje?"
+        ), "menu", ["Agendar consulta", "Falar com recepção"]
 
     if etapa_atual == "menu":
-        if mensagem == "1":
+        resp = str(mensagem).strip().lower()
+        if resp in ["1", "agendar consulta", "agendar"]:
             return "Perfeito! Por favor, digite o número da sua carteirinha ou o ID do horário desejado:", "agendar"
-        elif mensagem == "2":
+        elif resp in ["2", "falar com recepção", "recepção", "falar com a recepção"]:
             return "Certo, aguarde só um instante. Já vou chamar uma de nossas atendentes para falar com você! 👩‍⚕️", "fim"
         else:
-            return "Ops, não entendi essa opção. Digite 1 para Agendar ou 2 para Falar com a recepção.", "menu"
+            return "Ops, não entendi essa opção. Por favor, escolha 'Agendar consulta' ou 'Falar com recepção'.", "menu"
 
     if etapa_atual == "agendar":
         try:
@@ -323,9 +347,14 @@ def webhook(msg: Mensagem):
                 logger.info(f"Nenhuma sessão ativa e nenhum cadastro para {msg.telefone}; ignorando.")
                 return {"status": "no_session_or_patient"}
 
-        resposta, nova_etapa = processar_fluxo(
+        result = processar_fluxo(
             conn, msg.telefone, msg.mensagem, etapa_atual
         )
+        if len(result) == 3:
+            resposta, nova_etapa, botoes = result
+        else:
+            resposta, nova_etapa = result
+            botoes = []
 
         # Registra tentativa de envio no log de mensagens (saída) e na auditoria
         try:
@@ -367,7 +396,7 @@ def webhook(msg: Mensagem):
             """, (novo_contexto, sessao_id))
             conn.commit()
 
-        return {"resposta": resposta}
+        return {"resposta": resposta, "botoes": botoes}
 
     finally:
         # Libera a conexão de volta para o pool
