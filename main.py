@@ -81,7 +81,7 @@ def get_or_create_session(conn, telefone):
             id_sessao = sessao[0]
             contexto = sessao[1] if sessao[1] else {}
             etapa = contexto.get("etapa", "inicio")
-            return id_sessao, etapa
+            return id_sessao, etapa, contexto
 
         # Só crie sessão se o telefone estiver cadastrado como paciente
         cur.execute("""
@@ -90,7 +90,7 @@ def get_or_create_session(conn, telefone):
         paciente = cur.fetchone()
 
         if not paciente:
-            return None, None
+            return None, None, {}
 
         id_paciente = paciente[0]
 
@@ -102,10 +102,11 @@ def get_or_create_session(conn, telefone):
         """, (id_paciente,))
         if not cur.fetchone():
             # Sem consulta ativa — não criar sessão para conversas não relacionadas
-            return None, None
+            return None, None, {}
 
         # Cria sessão apenas para pacientes com consulta
-        contexto_inicial = json.dumps({"etapa": "inicio"})
+        contexto_obj = {"etapa": "inicio"}
+        contexto_inicial = json.dumps(contexto_obj)
         cur.execute("""
             INSERT INTO sessao_chatbot (telefone, id_paciente, estado_atual, contexto_json)
             VALUES (%s, %s, 'ABERTA', %s)
@@ -115,7 +116,7 @@ def get_or_create_session(conn, telefone):
         id_sessao = cur.fetchone()[0]
         conn.commit()
 
-    return id_sessao, "inicio"
+    return id_sessao, "inicio", contexto_obj
 
 
 def create_session_for_intent(conn, telefone):
@@ -128,7 +129,8 @@ def create_session_for_intent(conn, telefone):
         conn.commit()
 
     with conn.cursor() as cur:
-        contexto_inicial = json.dumps({"etapa": "inicio_agendamento"})
+        contexto_obj = {"etapa": "inicio_agendamento"}
+        contexto_inicial = json.dumps(contexto_obj)
         cur.execute("""
             INSERT INTO sessao_chatbot (telefone, estado_atual, contexto_json)
             VALUES (%s, 'ABERTA', %s)
@@ -140,10 +142,10 @@ def create_session_for_intent(conn, telefone):
     # Registrar auditoria para investigação — sessão criada por intenção de agendamento
     write_audit(conn, id_sessao, 'sessao_chatbot', 'CREATE_INTENT_SESSION', {
         'telefone': telefone,
-        'contexto': {'etapa': 'inicio_agendamento'}
+        'contexto': contexto_obj
     })
 
-    return id_sessao, "inicio_agendamento"
+    return id_sessao, "inicio_agendamento", contexto_obj
 
 
 def is_scheduling_intent(texto: str) -> bool:
@@ -233,7 +235,7 @@ def agendar(conn, telefone, id_disponibilidade):
 # =========================================================
 # FLUXO SIMPLES CHATBOT
 # =========================================================
-def processar_fluxo(conn, telefone, mensagem, etapa_atual):
+def processar_fluxo(conn, telefone, mensagem, etapa_atual, contexto):
     if etapa_atual == "inicio_agendamento":
         return (
             "Para prosseguir com seu atendimento, precisamos de alguns dados.\n\n"
@@ -268,36 +270,76 @@ def processar_fluxo(conn, telefone, mensagem, etapa_atual):
             p = cur.fetchone()
 
         if not p:
-            return "CPF não encontrado. Se você não tem cadastro, responda 'cadastro' para registrar ou envie outro CPF.", "pedir_cpf"
+            contexto["cpf_temp"] = digits
+            return "Vi que é seu primeiro acesso conosco! Para finalizar o seu cadastro, por favor, digite o seu *Nome Completo*:", "pedir_nome"
 
         id_paciente = p[0]
-        # Atualiza sessão com id_paciente e direciona para início do fluxo
+        # Atualiza sessão com id_paciente
         with conn.cursor() as cur:
             cur.execute("""
-                UPDATE sessao_chatbot SET id_paciente = %s, contexto_json = %s
+                UPDATE sessao_chatbot SET id_paciente = %s
                 WHERE telefone = %s
-            """, (id_paciente, json.dumps({"etapa": "inicio"}), telefone))
+            """, (id_paciente, telefone))
             conn.commit()
 
-        resultado_inicio = processar_fluxo(conn, telefone, mensagem, "inicio")
+        resultado_inicio = processar_fluxo(conn, telefone, mensagem, "inicio", contexto)
         resposta_inicio = resultado_inicio[0]
         botoes_inicio = resultado_inicio[2] if len(resultado_inicio) == 3 else []
-        return "Identificação confirmada. " + resposta_inicio, "inicio", botoes_inicio
+        
+        with conn.cursor() as cur:
+            cur.execute("SELECT nome FROM paciente WHERE id_paciente = %s", (id_paciente,))
+            nome_paciente = cur.fetchone()[0].split()[0]
+            
+        return f"Bem-vindo(a) de volta, {nome_paciente}! " + resposta_inicio, "inicio", botoes_inicio
+
+    if etapa_atual == "pedir_nome":
+        nome = (mensagem or '').strip()
+        if len(nome.split()) < 2:
+            return "Por favor, digite seu *nome e sobrenome* para o cadastro:", "pedir_nome"
+            
+        cpf = contexto.get("cpf_temp", "")
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO paciente (nome, cpf, telefone, aceite_lgpd, data_aceite_lgpd)
+                VALUES (%s, %s, %s, TRUE, CURRENT_TIMESTAMP)
+                RETURNING id_paciente
+            """, (nome, cpf, telefone))
+            id_paciente = cur.fetchone()[0]
+            
+            cur.execute("""
+                UPDATE sessao_chatbot SET id_paciente = %s
+                WHERE telefone = %s
+            """, (id_paciente, telefone))
+            conn.commit()
+            
+        resultado_inicio = processar_fluxo(conn, telefone, mensagem, "inicio", contexto)
+        resposta_inicio = resultado_inicio[0]
+        botoes_inicio = resultado_inicio[2] if len(resultado_inicio) == 3 else []
+        return f"Cadastro concluído com sucesso, {nome.split()[0]}! " + resposta_inicio, "inicio", botoes_inicio
 
     if etapa_atual == "inicio":
         return (
-            "Oiê! Tudo bem? 💙 Sou a assistente virtual da Clínica.\n"
             "Como posso te ajudar hoje?"
         ), "menu", ["Agendar consulta", "Falar com recepção"]
 
     if etapa_atual == "menu":
         resp = str(mensagem).strip().lower()
         if resp in ["1", "agendar consulta", "agendar"]:
-            return "Perfeito! Por favor, digite o número da sua carteirinha ou o ID do horário desejado:", "agendar"
+            with conn.cursor() as cur:
+                cur.execute("SELECT DISTINCT especialidade FROM medico WHERE especialidade IS NOT NULL LIMIT 3")
+                especialidades = [r[0] for r in cur.fetchall()]
+                
+            if especialidades:
+                return "Para qual especialidade você deseja agendar?", "escolher_especialidade", especialidades
+            return "Perfeito! Por favor, digite o ID do horário desejado:", "agendar"
         elif resp in ["2", "falar com recepção", "recepção", "falar com a recepção"]:
             return "Certo, aguarde só um instante. Já vou chamar uma de nossas atendentes para falar com você! 👩‍⚕️", "fim"
         else:
             return "Ops, não entendi essa opção. Por favor, escolha 'Agendar consulta' ou 'Falar com recepção'.", "menu"
+
+    if etapa_atual == "escolher_especialidade":
+        especialidade = (mensagem or '').strip()
+        return f"Ótima escolha ({especialidade}). Por favor, digite o ID do horário desejado:", "agendar"
 
     if etapa_atual == "agendar":
         try:
@@ -335,20 +377,20 @@ def webhook(msg: Mensagem):
             logger.warning("Envio de mensagens está desabilitado por kill-switch (ALLOW_SEND!=true)")
             return {"status": "sending_disabled"}
 
-        sessao_id, etapa_atual = get_or_create_session(conn, msg.telefone)
+        sessao_id, etapa_atual, contexto = get_or_create_session(conn, msg.telefone)
 
         # Se não existe sessão e o número não é de um paciente cadastrado,
         # permita criar sessão somente quando houver intenção explícita de agendamento
         if not sessao_id:
             if is_scheduling_intent(msg.mensagem):
-                sessao_id, etapa_atual = create_session_for_intent(conn, msg.telefone)
+                sessao_id, etapa_atual, contexto = create_session_for_intent(conn, msg.telefone)
                 logger.info(f"Criada sessão por intenção de agendamento para {msg.telefone}: {sessao_id}")
             else:
                 logger.info(f"Nenhuma sessão ativa e nenhum cadastro para {msg.telefone}; ignorando.")
                 return {"status": "no_session_or_patient"}
 
         result = processar_fluxo(
-            conn, msg.telefone, msg.mensagem, etapa_atual
+            conn, msg.telefone, msg.mensagem, etapa_atual, contexto
         )
         if len(result) == 3:
             resposta, nova_etapa, botoes = result
@@ -386,9 +428,10 @@ def webhook(msg: Mensagem):
         except Exception as e:
             logger.error(f"Falha ao registrar mensagem de saída/auditoria: {e}")
 
-        # Atualiza a etapa no JSONB
+        # Atualiza a etapa e mantém o restante do contexto no JSONB
+        contexto["etapa"] = nova_etapa
         with conn.cursor() as cur:
-            novo_contexto = json.dumps({"etapa": nova_etapa})
+            novo_contexto = json.dumps(contexto)
             cur.execute("""
                 UPDATE sessao_chatbot
                 SET contexto_json = %s
