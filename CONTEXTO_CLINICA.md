@@ -1,63 +1,57 @@
-# 🏥 Contexto do Projeto: Clínica WhatsApp Bot (Evolution API)
+# 🏥 Contexto do Projeto: Clínica WhatsApp Bot
 
-**Diretório Principal:** `D:\clinica-bot`
+**Ambiente:** Oracle Cloud (Always Free - Ampere A1 ARM64)
+**OS:** Oracle Linux 9
+**Servidor IP:** 137.131.225.116
 
-Este documento resume o estado da infraestrutura de atendimento do WhatsApp da clínica, baseada na **Evolution API** rodando nativamente no Windows, com banco de dados e painel **Chatwoot** via Docker.
+Este documento resume o estado atual da infraestrutura de atendimento do WhatsApp da clínica. O projeto foi **migrado** de um ambiente local (Windows/WSL) para um servidor em nuvem (Oracle Cloud), garantindo estabilidade e execução 100% via Docker.
 
 ---
 
-## 🏗️ Arquitetura Configuradada
+## 🏗️ Arquitetura Atual (Docker)
 
-O projeto foi estruturado para resolver os problemas de bloqueio do WSL2 no Windows, separando a infraestrutura da seguinte forma:
+O ecossistema roda inteiramente orquestrado pelo `docker-compose.yml`, otimizado para a arquitetura **ARM64**:
 
-1. **Containers Docker (`docker-compose.yml`)**
-   - `db`: PostgreSQL 15 (porta `15432:5432`) - Armazena dados da Evolution API e do Chatwoot.
-   - `redis`: Redis 7 (porta `6379:6379`) - Cache e mensageria.
-   - `chatwoot`: Painel de atendimento humano (porta `3000:3000`).
-   - `sidekiq`: Processamento de background do Chatwoot.
+1. **Evolution API (`:8080`)**:
+   - Motor de conexão com o WhatsApp.
+   - Comunica-se com o PostgreSQL e Redis.
+   - Dispara Webhooks para o Bot em Python.
 
-2. **Evolution API Nativa (`evolution-api-native/`)**
-   - Devido a limitações do Docker no Windows (WSL2 signature blocking), a Evolution API foi clonada para rodar **nativamente no Node.js** (porta `8080`).
-   - Foi criado o script `override.js` para burlar a detecção do OS.
-   - O `.env` nativo está configurado para acessar o PostgreSQL e Redis que rodam no Docker (via `127.0.0.1:15432` e `6379`).
+2. **Bot em Python / FastAPI (`:8000/docs`)**:
+   - Cérebro do sistema de triagem.
+   - Recebe mensagens da Evolution API, avalia horários e intenções, e direciona para o humano (Chatwoot) quando necessário.
 
-3. **Scripts de Automação Criados**
-   - `iniciar_evolution.bat`: Inicia o banco/redis no Docker, configura o `.env` nativo, instala os pacotes npm, aplica o Prisma (banco de dados) e sobe a Evolution API.
-   - `gerar_instancia.bat`: Faz a requisição POST para a Evolution API para criar a instância `clinica-bot` do WhatsApp.
-   - `qrcode.html`: Uma página HTML simples para você abrir no navegador, que consome a API da Evolution e renderiza o QR Code do WhatsApp.
+3. **Chatwoot (`:3000`)**:
+   - Painel de atendimento humano (CRM).
+   - **Nota de Arquitetura:** Roda de forma nativa (`chatwoot:latest`) sem emulação. A chave `SECRET_KEY_BASE` foi fixada em 128 caracteres no arquivo `.yml` para evitar travamentos do Rails 7.
+
+4. **Bancos de Dados**:
+   - **PostgreSQL (`pgvector/pgvector:pg15`)**: A imagem foi obrigatoriamente alterada de `alpine` para `pgvector` pois as novas versões do Chatwoot exigem a extensão `vector` para recursos de IA, o que causava falha na criação do banco (`db:chatwoot_prepare`).
+   - **Redis 7**: Gerenciamento de filas (Sidekiq) e cache da Evolution API.
+
+---
+
+## ⚠️ Lições Aprendidas na Migração (ARM64)
+- **Emulação QEMU:** Evitada. O Oracle Linux 9 (via SELinux) bloqueia binários AMD64 por padrão, causando `exec format error`.
+- **Tamanho de Senhas:** O Chatwoot falhará na inicialização silenciosamente se o `SECRET_KEY_BASE` tiver menos de 64 caracteres.
+- **Banco de Dados Chatwoot:** Em instalações do zero, é estritamente necessário rodar `docker compose run --rm chatwoot-web bundle exec rake db:chatwoot_prepare` com uma imagem Postgres que suporte `pgvector`.
 
 ---
 
 ## ✅ O Que Já Foi Feito (Status: Pronto)
 
-- [x] Estrutura do `docker-compose.yml` para os serviços base.
-- [x] Repositório da Evolution API baixado na pasta `evolution-api-native`.
-- [x] Script de patch `override.js` aplicado com sucesso.
-- [x] Scripts `.bat` prontos para rodar a aplicação sem complicação.
-- [x] Evolution API pré-compilada na pasta `dist/`.
+- [x] Migração de código do Windows para Linux via Git.
+- [x] Deploy da Evolution API + Redis + Banco.
+- [x] Resolução de conflitos de compatibilidade ARM64 do Chatwoot.
+- [x] Criação de tabelas do banco de dados concluída.
+- [x] Chatwoot acessível pelo IP público.
+- [x] Conta do SuperAdmin do Chatwoot criada.
 
 ---
 
-## 🔴 O Que Falta Fazer (Bloqueadores Atuais)
+## 🎯 Próximos Passos (Na Prática)
 
-Neste exato momento, **todo o sistema está desligado**. Para colocá-lo em 100% de funcionamento, faltam os seguintes passos na ordem:
-
-1. **Ligar o Docker Desktop**
-   - Detectei que o Docker API não está respondendo. O Docker Desktop precisa estar aberto no Windows antes de qualquer coisa, senão o Banco de Dados e o Redis não sobem.
-
-2. **Executar a Infraestrutura**
-   - Rodar o script `D:\clinica-bot\iniciar_evolution.bat` (que vai subir os containers do banco e iniciar a Evolution API no terminal).
-
-3. **Conectar o WhatsApp**
-   - Com a Evolution API rodando, executar o script `D:\clinica-bot\gerar_instancia.bat`.
-   - Abrir o arquivo `D:\clinica-bot\qrcode.html` no navegador e ler o QR Code com o WhatsApp do aparelho da clínica.
-
-4. **Testar Integração com Chatwoot / Bot**
-   - Acessar o Chatwoot (`http://localhost:3000`), configurar a caixa de entrada da Evolution API.
-   - Ligar o servidor Python (FastAPI) para assumir a triagem automática inicial antes de passar para o Chatwoot.
-
----
-
-## 🎯 Próximo Passo
-
-O sistema está montado e roteirizado, só precisa ser ligado. Abra o **Docker Desktop** no seu Windows, aguarde ele ficar "verde" (Running) e me avise para rodarmos os scripts de inicialização juntos!
+1. **Configurar Caixas de Entrada:** Conectar a Evolution API como uma Inbox dentro do painel do Chatwoot.
+2. **Gerar QR Code:** Chamar o endpoint da Evolution para conectar o número de WhatsApp da clínica ao servidor.
+3. **Testar Triagem:** Enviar uma mensagem para a clínica, verificar se o Bot em Python responde corretamente ou repassa a conversa para a tela do Chatwoot.
+4. **Isolamento de Projetos:** Garantir que o consumo de memória se mantenha baixo para podermos implementar o `appo-bot-love` (segundo cliente) no mesmo servidor sem gerar conflitos de rede ou carga.
