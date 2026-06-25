@@ -1,0 +1,122 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: clinica-postgres
+    restart: always
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-clinica_db}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: clinica-redis
+    restart: always
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:-redispass}"]
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+
+  evolution-api:
+    image: atendai/evolution-api:v2.1.1
+    container_name: evolution-api
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      - SERVER_URL=${EVOLUTION_SERVER_URL:-http://localhost:8080}
+      - DANGEROUS_FUNCTIONS=true
+      - DEL_INSTANCE=false
+      - DATABASE_PROVIDER=postgresql
+      - DATABASE_CONNECTION_URI=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-clinica_db}?schema=evolution
+      - REDIS_URI=redis://:${REDIS_PASSWORD:-redispass}@redis:6379/1
+      - AUTHENTICATION_TYPE=apikey
+      - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY:-sua_api_key_super_secreta}
+      - WEBHOOK_GLOBAL_ENABLED=true
+      - WEBHOOK_GLOBAL_URL=${WEBHOOK_GLOBAL_URL:-http://clinica-bot:8000/webhook}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  chatwoot-web:
+    image: chatwoot/chatwoot:v3.8.0
+    container_name: chatwoot-web
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - FRONTEND_URL=${CHATWOOT_FRONTEND_URL:-http://localhost:3000}
+      - SECRET_KEY_BASE=${CHATWOOT_SECRET_KEY:-change_me_to_a_random_string}
+      - POSTGRES_DATABASE=${POSTGRES_DB:-clinica_db}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_USERNAME=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-redispass}@redis:6379/2
+      - NODE_ENV=production
+      - RAILS_ENV=production
+      - INSTALLATION_ENV=docker
+    command: ['bundle', 'exec', 'rails', 's', '-p', '3000', '-b', '0.0.0.0']
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  chatwoot-worker:
+    image: chatwoot/chatwoot:v3.8.0
+    container_name: chatwoot-worker
+    restart: always
+    environment:
+      - FRONTEND_URL=${CHATWOOT_FRONTEND_URL:-http://localhost:3000}
+      - SECRET_KEY_BASE=${CHATWOOT_SECRET_KEY:-change_me_to_a_random_string}
+      - POSTGRES_DATABASE=${POSTGRES_DB:-clinica_db}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_USERNAME=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-redispass}@redis:6379/2
+      - NODE_ENV=production
+      - RAILS_ENV=production
+      - INSTALLATION_ENV=docker
+    command: ['bundle', 'exec', 'sidekiq', '-C', 'config/sidekiq.yml']
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  clinica-bot:
+    build: .
+    container_name: clinica-bot-python
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - DB_HOST=postgres
+      - DB_NAME=${POSTGRES_DB:-clinica_db}
+      - DB_USER=${POSTGRES_USER:-postgres}
+      - DB_PASS=${POSTGRES_PASSWORD:-postgres}
+      - ALLOW_SEND=true
+      - EVOLUTION_API_URL=http://evolution-api:8080
+      - EVOLUTION_API_KEY=${EVOLUTION_API_KEY:-sua_api_key_super_secreta}
+      - CHATWOOT_URL=http://chatwoot-web:3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:
