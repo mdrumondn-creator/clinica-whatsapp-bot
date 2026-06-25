@@ -60,7 +60,7 @@ services:
       - "3000:3000"
     environment:
       - FRONTEND_URL=${CHATWOOT_FRONTEND_URL:-http://localhost:3000}
-      - SECRET_KEY_BASE=${CHATWOOT_SECRET_KEY:-change_me_to_a_random_string}
+      - SECRET_KEY_BASE=${CHATWOOT_SECRET_KEY:-739a8c08ef309485800032e3a1f46d3e3518bb1bb2a6c8e31a0e1c2518e9a263c78cf8998846c4f09d846e10dd2a94f923b7e2898c0678d8a5c4efc9d78}
       - POSTGRES_DATABASE=${POSTGRES_DB:-clinica_db}
       - POSTGRES_HOST=postgres
       - POSTGRES_USERNAME=${POSTGRES_USER:-postgres}
@@ -82,7 +82,7 @@ services:
     restart: always
     environment:
       - FRONTEND_URL=${CHATWOOT_FRONTEND_URL:-http://localhost:3000}
-      - SECRET_KEY_BASE=${CHATWOOT_SECRET_KEY:-change_me_to_a_random_string}
+      - SECRET_KEY_BASE=${CHATWOOT_SECRET_KEY:-739a8c08ef309485800032e3a1f46d3e3518bb1bb2a6c8e31a0e1c2518e9a263c78cf8998846c4f09d846e10dd2a94f923b7e2898c0678d8a5c4efc9d78}
       - POSTGRES_DATABASE=${POSTGRES_DB:-clinica_db}
       - POSTGRES_HOST=postgres
       - POSTGRES_USERNAME=${POSTGRES_USER:-postgres}
