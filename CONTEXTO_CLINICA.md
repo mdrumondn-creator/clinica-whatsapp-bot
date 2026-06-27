@@ -14,6 +14,7 @@ O ecossistema roda inteiramente orquestrado pelo `docker-compose.yml`, otimizado
 
 1. **Evolution API (`:8080`)**:
    - Motor de conexão com o WhatsApp.
+   - Atualizado para a versão **v2.3.7** (estável).
    - Comunica-se com o PostgreSQL e Redis.
    - Dispara Webhooks para o Bot em Python.
 
@@ -35,6 +36,7 @@ O ecossistema roda inteiramente orquestrado pelo `docker-compose.yml`, otimizado
 - **Emulação QEMU:** Evitada. O Oracle Linux 9 (via SELinux) bloqueia binários AMD64 por padrão, causando `exec format error`.
 - **Tamanho de Senhas:** O Chatwoot falhará na inicialização silenciosamente se o `SECRET_KEY_BASE` tiver menos de 64 caracteres.
 - **Banco de Dados Chatwoot:** Em instalações do zero, é estritamente necessário rodar `docker compose run --rm chatwoot-web bundle exec rake db:chatwoot_prepare` com uma imagem Postgres que suporte `pgvector`.
+- **Alinhamento de Webhooks**: O Chatwoot exige que a URL do Webhook da API do Canal esteja exatamente alinhada com o nome da instância ativa (ex: `/chatwoot/webhook/bot`), sob pena de retornar erro `404 Not Found` no tráfego de saída.
 
 ---
 
@@ -45,13 +47,15 @@ O ecossistema roda inteiramente orquestrado pelo `docker-compose.yml`, otimizado
 - [x] Resolução de conflitos de compatibilidade ARM64 do Chatwoot.
 - [x] Criação de tabelas do banco de dados concluída.
 - [x] Chatwoot acessível pelo IP público.
-- [x] Conta do SuperAdmin do Chatwoot criada.
+- [x] Criação da conta do SuperAdmin e caixa de entrada do Chatwoot.
+- [x] Alinhamento e atualização da Evolution API para a versão **v2.3.7** (estável).
+- [x] Correção dos webhooks do Chatwoot no banco de dados local.
 
 ---
 
 ## 🎯 Próximos Passos (Na Prática)
 
-1. **Configurar Caixas de Entrada:** Conectar a Evolution API como uma Inbox dentro do painel do Chatwoot.
-2. **Gerar QR Code:** Chamar o endpoint da Evolution para conectar o número de WhatsApp da clínica ao servidor.
-3. **Testar Triagem:** Enviar uma mensagem para a clínica, verificar se o Bot em Python responde corretamente ou repassa a conversa para a tela do Chatwoot.
-4. **Isolamento de Projetos:** Garantir que o consumo de memória se mantenha baixo para podermos implementar o `appo-bot-love` (segundo cliente) no mesmo servidor sem gerar conflitos de rede ou carga.
+1. **Leitura do QR Code / Pairing Code**: Autenticar o celular do cliente no Evolution Manager.
+2. **Testar Triagem**: Enviar uma mensagem para a clínica, verificar se o Bot em Python responde corretamente ou repassa a conversa para a tela do Chatwoot.
+3. **Isolamento de Projetos**: Garantir que o consumo de memória se mantenha baixo para podermos implementar o `appo-bot-love` (segundo cliente) no mesmo servidor sem gerar conflitos de rede ou carga.
+
