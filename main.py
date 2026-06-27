@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, Header
+from fastapi import FastAPI, HTTPException, Depends, Header, Body
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from psycopg2 import pool
@@ -12,6 +12,7 @@ import hmac
 import time
 import base64
 import re
+import requests
 from typing import Optional, List
 from datetime import datetime, time as dt_time
 
@@ -495,8 +496,86 @@ MSG_BOT_DESATIVADO = (
     "Obrigado pela compreensão! 🏥"
 )
 
+def enviar_mensagem_whatsapp(telefone: str, texto: str, botoes: list = None):
+    api_url = os.getenv("EVOLUTION_API_URL", "http://evolution-api:8080")
+    api_key = os.getenv("EVOLUTION_API_KEY", "apikey_secreta_evolution")
+    instance = "bot"
+    
+    headers = {
+        "apikey": api_key,
+        "Content-Type": "application/json"
+    }
+    
+    if botoes:
+        texto += "\n\n" + "\n".join(f"*{i+1}* - {btn}" for i, btn in enumerate(botoes))
+        
+    payload = {
+        "number": telefone,
+        "text": texto
+    }
+    
+    try:
+        url = f"{api_url}/message/sendText/{instance}"
+        logger.info(f"Enviando mensagem para {telefone} via Evolution API...")
+        res = requests.post(url, json=payload, headers=headers, timeout=10)
+        if res.status_code not in (200, 201):
+            logger.error(f"Erro ao enviar mensagem via Evolution API: {res.status_code} - {res.text}")
+        else:
+            logger.info(f"Mensagem enviada com sucesso para {telefone}")
+    except Exception as e:
+        logger.error(f"Exceção ao enviar mensagem via Evolution API: {e}")
+
 @app.post("/webhook")
-def webhook(msg: Mensagem):
+@app.post("/webhook/{path:path}")
+def webhook(payload: dict = Body(...)):
+    # Detect if it is an Evolution API payload
+    is_evolution = "event" in payload and "instance" in payload
+    
+    if is_evolution:
+        event = payload.get("event")
+        if event != "messages.upsert":
+            logger.info(f"Ignorando evento da Evolution API: {event}")
+            return {"status": "event_ignored", "event": event}
+            
+        data = payload.get("data", {})
+        key = data.get("key", {})
+        from_me = key.get("fromMe", False)
+        
+        # Ignora se for do próprio bot
+        if from_me:
+            return {"status": "ignored_outbound"}
+            
+        remote_jid = key.get("remoteJid", "")
+        telefone = remote_jid.split("@")[0] if "@" in remote_jid else remote_jid
+        telefone = re.sub(r"\D", "", telefone)
+        
+        message_data = data.get("message", {})
+        if not message_data:
+            return {"status": "empty_message"}
+            
+        mensagem = (
+            message_data.get("conversation") or 
+            message_data.get("extendedTextMessage", {}).get("text") or 
+            message_data.get("imageMessage", {}).get("caption") or 
+            message_data.get("videoMessage", {}).get("caption") or 
+            ""
+        )
+        api_message_id = key.get("id", f"evo-{uuid.uuid4().hex}")
+        direcao = 'SAIDA' if from_me else 'ENTRADA'
+        
+        msg = Mensagem(
+            telefone=telefone,
+            mensagem=mensagem,
+            api_message_id=api_message_id,
+            direcao=direcao
+        )
+    else:
+        try:
+            msg = Mensagem(**payload)
+        except Exception as e:
+            logger.error(f"Erro ao parsear payload do webhook: {e}")
+            raise HTTPException(status_code=422, detail=str(e))
+
     conn = db_pool.getconn()
     try:
         # Salva a mensagem recebida
@@ -525,6 +604,10 @@ def webhook(msg: Mensagem):
                 resposta_fora = MSG_FORA_HORARIO.format(inicio=inicio_str, fim=fim_str)
 
             logger.info(f"Mensagem recebida fora do horário de {msg.telefone}. Registrada para acompanhamento.")
+            
+            # Envia a resposta fora do horário
+            enviar_mensagem_whatsapp(msg.telefone, resposta_fora)
+            
             return {"resposta": resposta_fora, "botoes": [], "status": "fora_horario"}
 
         # =============================================
@@ -589,6 +672,9 @@ def webhook(msg: Mensagem):
                 WHERE id_sessao = %s
             """, (novo_contexto, sessao_id))
             conn.commit()
+
+        # Envia a resposta via Evolution API
+        enviar_mensagem_whatsapp(msg.telefone, resposta, botoes)
 
         return {"resposta": resposta, "botoes": botoes}
 
