@@ -285,7 +285,8 @@ def is_scheduling_intent(texto: str) -> bool:
         return False
     t = texto.lower()
     keywords = [
-        'agend', 'marcar', 'consulta', 'horario', 'horário'
+        'agend', 'marcar', 'consulta', 'horario', 'horário',
+        'ola', 'olá', 'oi', 'bom dia', 'boa tarde', 'boa noite', 'preciso', 'quero'
     ]
     for k in keywords:
         if k in t:
