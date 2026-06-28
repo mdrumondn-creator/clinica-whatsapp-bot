@@ -1078,8 +1078,10 @@ def get_consultas(req_user=Depends(verificar_token_jwt)):
                 SELECT 
                     c.id_consulta, 
                     c.status,
+                    p.id_paciente,
                     p.nome as paciente_nome,
                     p.telefone as paciente_telefone,
+                    p.cpf as paciente_cpf,
                     d.data_hora_inicio as inicio,
                     d.data_hora_fim as fim,
                     m.nome as medico_nome
@@ -1132,3 +1134,33 @@ def cancelar_consulta_admin(id_consulta: int, req_user=Depends(verificar_token_j
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         db_pool.putconn(conn)
+
+
+# =========================================================
+# ENDPOINT: HISTÓRICO DO PACIENTE
+# =========================================================
+@app.get("/api/admin/pacientes/{id_paciente}/historico")
+def get_historico_paciente(id_paciente: int, req_user=Depends(verificar_token_jwt)):
+    conn = db_pool.getconn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT 
+                    c.id_consulta, c.status,
+                    d.data_hora_inicio as inicio,
+                    m.nome as medico_nome
+                FROM consulta c
+                JOIN disponibilidade d ON c.id_disponibilidade = d.id_disponibilidade
+                JOIN medico m ON d.id_medico = m.id_medico
+                WHERE c.id_paciente = %s
+                ORDER BY d.data_hora_inicio DESC
+            """, (id_paciente,))
+            hist = cur.fetchall()
+            for h in hist:
+                if h["inicio"]: h["inicio"] = h["inicio"].isoformat()
+        return {"historico": hist}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db_pool.putconn(conn)
+

@@ -1293,7 +1293,7 @@ async function loadConsultas() {
       tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><div class="icon">📭</div><p>Nenhuma consulta agendada</p></div></td></tr>`;
     } else {
       tbody.innerHTML = data.consultas.map(c => `
-        <tr>
+        <tr style="cursor:pointer; transition: background 0.2s;" onmouseover="this.style.background='var(--bg-base)'" onmouseout="this.style.background='transparent'" onclick="openConsultaModal(${c.id_paciente}, '${c.paciente_nome || 'Desconhecido'}', '${c.paciente_telefone || '—'}', '${c.paciente_cpf || 'Não informado'}')">
           <td>${fmtDatetime(c.inicio)}</td>
           <td><strong>${c.paciente_nome || 'Desconhecido'}</strong></td>
           <td>${c.paciente_telefone || '—'}</td>
@@ -1301,7 +1301,7 @@ async function loadConsultas() {
           <td>${statusBadge(c.status)}</td>
           <td>
             ${c.status === 'AGENDADA' || c.status === 'CONFIRMADA' ? 
-              `<button class="btn btn-ghost" style="color:var(--danger);font-size:.75rem;padding:.3rem .5rem;" onclick="cancelarConsulta(${c.id_consulta})">❌ Cancelar</button>` 
+              `<button class="btn btn-ghost" style="color:var(--danger);font-size:.75rem;padding:.3rem .5rem;" onclick="event.stopPropagation(); cancelarConsulta(${c.id_consulta})">❌ Cancelar</button>` 
               : ''}
           </td>
         </tr>
@@ -1309,6 +1309,35 @@ async function loadConsultas() {
     }
   } catch (e) {
     console.error('Erro ao carregar consultas:', e);
+  }
+}
+
+async function openConsultaModal(id_paciente, nome, tel, cpf) {
+  if(!id_paciente) return;
+  document.getElementById('modal-pac-nome').textContent = nome;
+  document.getElementById('modal-pac-tel').textContent = tel;
+  document.getElementById('modal-pac-cpf').textContent = cpf;
+  
+  const tbody = document.getElementById('modal-pac-historico');
+  tbody.innerHTML = `<tr><td colspan="3" style="text-align:center;">Carregando...</td></tr>`;
+  
+  document.getElementById('modal-paciente').classList.remove('hidden');
+  
+  try {
+    const data = await api('GET', `/api/admin/pacientes/${id_paciente}/historico`);
+    if(data.historico.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="3" style="text-align:center;color:var(--text-3);">Nenhum agendamento encontrado.</td></tr>`;
+    } else {
+      tbody.innerHTML = data.historico.map(h => `
+        <tr>
+          <td>${fmtDatetime(h.inicio)}</td>
+          <td>${h.medico_nome}</td>
+          <td>${statusBadge(h.status)}</td>
+        </tr>
+      `).join('');
+    }
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="3" style="text-align:center;color:var(--danger);">Erro ao carregar histórico</td></tr>`;
   }
 }
 
@@ -1354,5 +1383,32 @@ setInterval(() => {
   if (authToken) updateBotPill();
 }, 60000);
 </script>
+
+<!-- MODAL PACIENTE -->
+<div id="modal-paciente" class="hidden" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:9999;backdrop-filter:blur(2px);">
+  <div class="card" style="width: 100%; max-width: 500px; margin: 1rem; position: relative; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
+    <button onclick="document.getElementById('modal-paciente').classList.add('hidden')" style="position:absolute;top:1rem;right:1rem;background:none;border:none;color:var(--text-1);font-size:1.5rem;cursor:pointer;">&times;</button>
+    <div class="card-header" style="border-bottom: 1px solid var(--border); padding-bottom: .5rem; margin-bottom: 1rem;">
+      <div class="card-title">👤 Ficha do Paciente</div>
+    </div>
+    <div style="margin-bottom: 1.5rem; color: var(--text-2); line-height: 1.6; font-size: .9rem;">
+      <p><strong style="color:var(--text-1)">Nome:</strong> <span id="modal-pac-nome"></span></p>
+      <p><strong style="color:var(--text-1)">Telefone:</strong> <span id="modal-pac-tel"></span></p>
+      <p><strong style="color:var(--text-1)">CPF:</strong> <span id="modal-pac-cpf"></span></p>
+    </div>
+    <div class="card-header" style="border-bottom: 1px solid var(--border); padding-bottom: .5rem; margin-bottom: .5rem;">
+      <div class="card-title" style="font-size:.9rem;">🗓️ Histórico de Consultas</div>
+    </div>
+    <div class="table-responsive" style="max-height: 250px; overflow-y: auto;">
+      <table>
+        <thead>
+          <tr><th>Data e Hora</th><th>Médico</th><th>Status</th></tr>
+        </thead>
+        <tbody id="modal-pac-historico">
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
 </body>
 </html>
