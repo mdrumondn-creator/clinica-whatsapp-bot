@@ -1070,7 +1070,7 @@ def mensagens_pendentes(user=Depends(admin_auth)):
 # ENDPOINT: LISTAR CONSULTAS
 # =========================================================
 @app.get("/api/admin/consultas")
-def get_consultas(req_user=Depends(verificar_token)):
+def get_consultas(req_user=Depends(verificar_token_jwt)):
     conn = db_pool.getconn()
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
@@ -1108,7 +1108,7 @@ def get_consultas(req_user=Depends(verificar_token)):
 # ENDPOINT: CANCELAR CONSULTA
 # =========================================================
 @app.put("/api/admin/consultas/{id_consulta}/cancelar")
-def cancelar_consulta_admin(id_consulta: int, req_user=Depends(verificar_token)):
+def cancelar_consulta_admin(id_consulta: int, req_user=Depends(verificar_token_jwt)):
     conn = db_pool.getconn()
     try:
         with conn.cursor() as cur:
