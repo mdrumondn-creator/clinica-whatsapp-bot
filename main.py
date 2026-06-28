@@ -999,7 +999,7 @@ def listar_agenda(user=Depends(admin_auth)):
                        m.especialidade, d.inicio_datetime, d.fim_datetime,
                        d.status, d.origem,
                        c.id_consulta, c.status AS status_consulta,
-                       p.nome AS paciente_nome, p.telefone AS paciente_telefone
+                       p.id_paciente, p.nome AS paciente_nome, p.telefone AS paciente_telefone, p.cpf AS paciente_cpf
                 FROM disponibilidade d
                 JOIN medico m ON m.id_medico = d.id_medico
                 LEFT JOIN consulta c ON c.id_disponibilidade = d.id_disponibilidade

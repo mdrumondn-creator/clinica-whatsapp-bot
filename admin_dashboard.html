@@ -572,22 +572,22 @@
     <!-- PAGE: DASHBOARD -->
     <div class="page active animate-in" id="page-dashboard">
       <div class="stats-grid" id="stats-grid">
-        <div class="stat-card green">
+        <div class="stat-card green" style="cursor: pointer;" onclick="showPage('consultas')">
           <div class="stat-label">Consultas Hoje</div>
           <div class="stat-value" id="stat-consultas">—</div>
           <div class="stat-sub">agendadas/confirmadas</div>
         </div>
-        <div class="stat-card blue">
+        <div class="stat-card blue" style="cursor: pointer;" onclick="showPage('agenda')">
           <div class="stat-label">Horários Livres</div>
           <div class="stat-value" id="stat-livres">—</div>
           <div class="stat-sub">disponíveis hoje</div>
         </div>
-        <div class="stat-card yellow">
+        <div class="stat-card yellow" style="cursor: pointer;" onclick="showPage('mensagens')">
           <div class="stat-label">Mensagens Hoje</div>
           <div class="stat-value" id="stat-msgs">—</div>
           <div class="stat-sub">recebidas pelo bot</div>
         </div>
-        <div class="stat-card red">
+        <div class="stat-card red" style="cursor: pointer;" onclick="showPage('medicos')">
           <div class="stat-label">Médicos Ativos</div>
           <div class="stat-value" id="stat-medicos">—</div>
           <div class="stat-sub">cadastrados</div>
@@ -1044,11 +1044,11 @@ async function loadDashboard() {
       tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><div class="icon">📭</div><p>Nenhum agendamento futuro</p></div></td></tr>`;
     } else {
       tbody.innerHTML = proximos.map(a => `
-        <tr>
+        <tr style="cursor:pointer; transition: background 0.2s;" onmouseover="this.style.background='var(--bg-base)'" onmouseout="this.style.background='transparent'" onclick="openConsultaModal(${a.id_paciente}, '${a.paciente_nome || 'Desconhecido'}', '${a.paciente_telefone || '—'}', '${a.paciente_cpf || 'Não informado'}')">
           <td>${fmtDatetime(a.inicio_datetime)}</td>
           <td>${a.medico_nome}</td>
           <td>${a.especialidade || '—'}</td>
-          <td>${a.paciente_nome || '—'}</td>
+          <td><strong>${a.paciente_nome || '—'}</strong></td>
           <td>${statusBadge(a.status_consulta || 'AGENDADA')}</td>
         </tr>
       `).join('');
