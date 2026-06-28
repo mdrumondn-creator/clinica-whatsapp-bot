@@ -547,6 +547,11 @@ def webhook(payload: dict = Body(...)):
             return {"status": "ignored_outbound"}
             
         remote_jid = key.get("remoteJid", "")
+        
+        # Ignora mensagens de grupos ou de status
+        if "@g.us" in remote_jid or "status@broadcast" in remote_jid:
+            return {"status": "ignored_group_or_status"}
+            
         telefone = remote_jid.split("@")[0] if "@" in remote_jid else remote_jid
         telefone = re.sub(r"\D", "", telefone)
         
