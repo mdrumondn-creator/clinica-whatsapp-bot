@@ -532,6 +532,9 @@
       <div class="nav-item" id="nav-agenda" onclick="showPage('agenda')">
         <span class="icon">📅</span> Agenda
       </div>
+      <div class="nav-item" id="nav-consultas" onclick="showPage('consultas')">
+        <span class="icon">📋</span> Consultas
+      </div>
       <div class="nav-item" id="nav-medicos" onclick="showPage('medicos')">
         <span class="icon">👨‍⚕️</span> Médicos
       </div>
@@ -703,6 +706,33 @@
           <li>🔴 <strong style="color:var(--text-1)">Bot Desativado (Kill-switch):</strong> nenhuma resposta automática — controle total pela equipe.</li>
           <li>👤 <strong style="color:var(--text-1)">Ações administrativas</strong> (liberar agenda, cadastrar médico) só estão disponíveis aqui neste painel.</li>
         </ul>
+      </div>
+    </div>
+
+    <!-- PAGE: CONSULTAS -->
+    <div class="page animate-in" id="page-consultas">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">📋 Próximas Consultas</div>
+          <button class="btn btn-primary" onclick="loadConsultas()" style="font-size:.8rem;padding:.4rem .8rem;">🔄 Atualizar</button>
+        </div>
+        <div class="table-responsive">
+          <table>
+            <thead>
+              <tr>
+                <th>Data / Hora</th>
+                <th>Paciente</th>
+                <th>Telefone</th>
+                <th>Médico</th>
+                <th>Status</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-consultas">
+              <!-- Consultas carregadas aqui -->
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
 
@@ -931,7 +961,7 @@ async function doLogin() {
     document.getElementById('login-screen').classList.add('hide');
     document.getElementById('app').classList.add('show');
 
-    await Promise.all([loadDashboard(), loadConfig(), loadMedicos(), loadAgenda(), loadMensagens()]);
+    await Promise.all([loadDashboard(), loadConfig(), loadMedicos(), loadAgenda(), loadConsultas(), loadMensagens()]);
   } catch (e) {
     alert.className = 'alert error';
     alert.textContent = '❌ ' + e.message;
@@ -967,6 +997,7 @@ function showPage(name) {
     dashboard: 'Dashboard',
     config: 'Controle do Bot',
     agenda: 'Gestão de Agenda',
+    consultas: 'Consultas Agendadas',
     medicos: 'Médicos',
     mensagens: 'Mensagens'
   };
@@ -977,6 +1008,7 @@ function refreshCurrentPage() {
   if (currentPage === 'dashboard') loadDashboard();
   else if (currentPage === 'config') loadConfig();
   else if (currentPage === 'agenda') loadAgenda();
+  else if (currentPage === 'consultas') loadConsultas();
   else if (currentPage === 'medicos') loadMedicos();
   else if (currentPage === 'mensagens') loadMensagens();
 }
@@ -1249,6 +1281,46 @@ async function loadAgenda() {
     }
   } catch (e) {
     console.error('Erro ao carregar agenda:', e);
+  }
+}
+
+// ===================== CONSULTAS =====================
+async function loadConsultas() {
+  try {
+    const data = await api('GET', '/api/admin/consultas');
+    const tbody = document.getElementById('tbody-consultas');
+    if (data.consultas.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><div class="icon">📭</div><p>Nenhuma consulta agendada</p></div></td></tr>`;
+    } else {
+      tbody.innerHTML = data.consultas.map(c => `
+        <tr>
+          <td>${fmtDatetime(c.inicio)}</td>
+          <td><strong>${c.paciente_nome || 'Desconhecido'}</strong></td>
+          <td>${c.paciente_telefone || '—'}</td>
+          <td>${c.medico_nome || '—'}</td>
+          <td>${statusBadge(c.status)}</td>
+          <td>
+            ${c.status === 'AGENDADA' || c.status === 'CONFIRMADA' ? 
+              `<button class="btn btn-ghost" style="color:var(--danger);font-size:.75rem;padding:.3rem .5rem;" onclick="cancelarConsulta(${c.id_consulta})">❌ Cancelar</button>` 
+              : ''}
+          </td>
+        </tr>
+      `).join('');
+    }
+  } catch (e) {
+    console.error('Erro ao carregar consultas:', e);
+  }
+}
+
+async function cancelarConsulta(id_consulta) {
+  if (!confirm("Tem certeza que deseja cancelar esta consulta? O horário voltará a ficar LIVRE na agenda.")) return;
+  try {
+    await api('PUT', `/api/admin/consultas/${id_consulta}/cancelar`);
+    toast('Consulta cancelada com sucesso.', 'success');
+    loadConsultas();
+    if (currentPage === 'agenda') loadAgenda();
+  } catch (e) {
+    toast('Erro ao cancelar: ' + e.message, 'error');
   }
 }
 

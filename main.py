@@ -1064,3 +1064,71 @@ def mensagens_pendentes(user=Depends(admin_auth)):
         except:
             pass
         db_pool.putconn(conn)
+
+
+# =========================================================
+# ENDPOINT: LISTAR CONSULTAS
+# =========================================================
+@app.get("/api/admin/consultas")
+def get_consultas(req_user=Depends(verificar_token)):
+    conn = db_pool.getconn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT 
+                    c.id_consulta, 
+                    c.status,
+                    p.nome as paciente_nome,
+                    p.telefone as paciente_telefone,
+                    d.data_hora_inicio as inicio,
+                    d.data_hora_fim as fim,
+                    m.nome as medico_nome
+                FROM consulta c
+                JOIN paciente p ON c.id_paciente = p.id_paciente
+                JOIN disponibilidade d ON c.id_disponibilidade = d.id_disponibilidade
+                JOIN medico m ON d.id_medico = m.id_medico
+                WHERE d.data_hora_inicio >= CURRENT_DATE
+                ORDER BY d.data_hora_inicio ASC
+            """)
+            consultas = cur.fetchall()
+            
+            for c in consultas:
+                if c["inicio"]: c["inicio"] = c["inicio"].isoformat()
+                if c["fim"]: c["fim"] = c["fim"].isoformat()
+                
+        return {"consultas": consultas}
+    except Exception as e:
+        logger.error(f"Erro ao buscar consultas: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db_pool.putconn(conn)
+
+
+# =========================================================
+# ENDPOINT: CANCELAR CONSULTA
+# =========================================================
+@app.put("/api/admin/consultas/{id_consulta}/cancelar")
+def cancelar_consulta_admin(id_consulta: int, req_user=Depends(verificar_token)):
+    conn = db_pool.getconn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id_disponibilidade FROM consulta WHERE id_consulta = %s", (id_consulta,))
+            res = cur.fetchone()
+            if not res:
+                raise HTTPException(status_code=404, detail="Consulta não encontrada")
+                
+            id_disp = res[0]
+            
+            cur.execute("UPDATE consulta SET status = 'CANCELADA_CLINICA' WHERE id_consulta = %s", (id_consulta,))
+            cur.execute("UPDATE disponibilidade SET status = 'LIVRE' WHERE id_disponibilidade = %s", (id_disp,))
+            conn.commit()
+            
+        return {"sucesso": True}
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db_pool.putconn(conn)
