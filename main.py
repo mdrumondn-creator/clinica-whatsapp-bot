@@ -221,7 +221,7 @@ def get_paciente(conn, telefone):
 def get_or_create_session(conn, telefone):
     with conn.cursor() as cur:
         cur.execute("""
-            SELECT id_sessao, contexto_json FROM sessao_chatbot
+            SELECT id_sessao, contexto_json, updated_at FROM sessao_chatbot
             WHERE telefone = %s AND estado_atual = 'ABERTA'
         """, (telefone,))
         
@@ -231,6 +231,17 @@ def get_or_create_session(conn, telefone):
             id_sessao = sessao[0]
             contexto = sessao[1] if sessao[1] else {}
             etapa = contexto.get("etapa", "inicio")
+            
+            # Timeout logic: if inactive for 15+ mins and in the main flow, reset to 'inicio'
+            updated_at = sessao[2]
+            if updated_at:
+                now_utc = datetime.now(updated_at.tzinfo) if updated_at.tzinfo else datetime.now()
+                diff = now_utc - updated_at
+                if diff.total_seconds() > 900:  # 15 minutes
+                    if etapa in ["menu", "escolher_especialidade", "agendar", "fim", "inicio"]:
+                        etapa = "inicio"
+                        contexto["etapa"] = "inicio"
+            
             return id_sessao, etapa, contexto
 
         # Só crie sessão se o telefone estiver cadastrado como paciente
@@ -684,7 +695,7 @@ def webhook(payload: dict = Body(...)):
             novo_contexto = json.dumps(contexto)
             cur.execute("""
                 UPDATE sessao_chatbot
-                SET contexto_json = %s
+                SET contexto_json = %s, updated_at = CURRENT_TIMESTAMP
                 WHERE id_sessao = %s
             """, (novo_contexto, sessao_id))
             conn.commit()
