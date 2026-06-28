@@ -109,6 +109,10 @@ def get_db_connection():
     try:
         yield conn
     finally:
+        try:
+            conn.rollback()
+        except:
+            pass
         db_pool.putconn(conn)
 
 
@@ -685,6 +689,10 @@ def webhook(payload: dict = Body(...)):
         return {"resposta": resposta, "botoes": botoes}
 
     finally:
+        try:
+            conn.rollback()
+        except:
+            pass
         db_pool.putconn(conn)
 
 
@@ -728,6 +736,10 @@ def admin_login(req: LoginRequest):
             }
         }
     finally:
+        try:
+            conn.rollback()
+        except:
+            pass
         db_pool.putconn(conn)
 
 
@@ -754,6 +766,10 @@ def get_config(user=Depends(admin_auth)):
 
         return result
     finally:
+        try:
+            conn.rollback()
+        except:
+            pass
         db_pool.putconn(conn)
 
 
@@ -801,6 +817,10 @@ def update_config(req: ConfigUpdate, user=Depends(admin_auth)):
 
         return {"status": "ok", "mensagem": "Configurações atualizadas com sucesso"}
     finally:
+        try:
+            conn.rollback()
+        except:
+            pass
         db_pool.putconn(conn)
 
 
@@ -821,6 +841,10 @@ def listar_medicos(user=Depends(admin_auth)):
             medicos = cur.fetchall()
         return {"medicos": medicos}
     finally:
+        try:
+            conn.rollback()
+        except:
+            pass
         db_pool.putconn(conn)
 
 
@@ -845,6 +869,10 @@ def cadastrar_medico(req: NovoMedico, user=Depends(admin_auth)):
         conn.rollback()
         raise HTTPException(status_code=409, detail="Médico com este CRM já cadastrado")
     finally:
+        try:
+            conn.rollback()
+        except:
+            pass
         db_pool.putconn(conn)
 
 
@@ -890,6 +918,10 @@ def liberar_agenda(req: LiberarAgenda, user=Depends(admin_auth)):
 
         return {"status": "ok", "criados": criados, "erros": erros}
     finally:
+        try:
+            conn.rollback()
+        except:
+            pass
         db_pool.putconn(conn)
 
 
@@ -925,6 +957,10 @@ def listar_agenda(user=Depends(admin_auth)):
 
         return {"agenda": agenda}
     finally:
+        try:
+            conn.rollback()
+        except:
+            pass
         db_pool.putconn(conn)
 
 
@@ -954,4 +990,8 @@ def mensagens_pendentes(user=Depends(admin_auth)):
 
         return {"mensagens": mensagens}
     finally:
+        try:
+            conn.rollback()
+        except:
+            pass
         db_pool.putconn(conn)
