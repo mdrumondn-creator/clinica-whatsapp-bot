@@ -662,18 +662,8 @@ def webhook(payload: dict = Body(...)):
                 """, (msg.telefone, resposta, out_api_id))
                 conn.commit()
 
-            # Auditoria do envio
-            with conn.cursor() as acur:
-                acur.execute("""
-                    INSERT INTO auditoria (id_registro, tabela, acao, dados_novos)
-                    VALUES (%s, %s, %s, %s::jsonb)
-                """, (out_api_id, 'whatsapp_mensagem', 'OUTGOING_SEND', json.dumps({
-                    'telefone': msg.telefone,
-                    'api_message_id': out_api_id,
-                    'mensagem': resposta
-                })))
-                conn.commit()
         except Exception as e:
+            conn.rollback()
             logger.error(f"Falha ao registrar mensagem de saída/auditoria: {e}")
 
         # Atualiza a etapa
