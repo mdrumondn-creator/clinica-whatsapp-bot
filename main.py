@@ -164,8 +164,7 @@ def bot_esta_operacional(conn) -> tuple:
     """Retorna (operacional: bool, config: dict)"""
     with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
         cur.execute("""
-            SELECT bot_ativo, bot_inicio_funcionamento, bot_fim_funcionamento,
-                   tempo_padrao_consulta_minutos
+            SELECT *
             FROM configuracao_sistema
             ORDER BY id_config LIMIT 1
         """)
@@ -373,21 +372,16 @@ def agendar(conn, telefone, id_disponibilidade):
 # =========================================================
 # FLUXO SIMPLES CHATBOT
 # =========================================================
-def processar_fluxo(conn, telefone, mensagem, etapa_atual, contexto):
+def processar_fluxo(conn, telefone, mensagem, etapa_atual, contexto, config):
     if etapa_atual == "inicio_agendamento":
-        return (
-            "Para prosseguir com seu atendimento, precisamos de alguns dados.\n\n"
-            "🔒 *Em conformidade com a Lei nº 13.709 – Lei Geral de Proteção de Dados Pessoais (LGPD)*, será necessário o tratamento de seus dados pessoais para finalidade exclusiva de identificação, visando fornecer o atendimento adequado e aprimorar nossos serviços e sua experiência.\n\n"
-            "🔗 Leia a lei na íntegra: https://www.planalto.gov.br/ccivil_03/_ato2015-2018/2018/lei/l13709.htm\n\n"
-            "Você aceita os termos descritos no link e concorda com o tratamento dos seus dados?"
-        ), "validar_lgpd", ["Concordo", "Não Concordo"]
+        return config.get('msg_saudacao', "Para prosseguir com seu atendimento, precisamos de alguns dados...\nVocê aceita os termos e concorda com o tratamento dos seus dados?"), "validar_lgpd", ["Concordo", "Não Concordo"]
 
     if etapa_atual == "validar_lgpd":
         resp = str(mensagem).strip().lower()
         if resp in ["1", "concordo"]:
-            return "Obrigado por confirmar! Por favor, digite seu *CPF* (somente números) ou número da carteirinha:", "pedir_cpf"
+            return config.get('msg_solicitar_cpf', "Obrigado por confirmar! Por favor, digite seu *CPF* (somente números) ou número da carteirinha:"), "pedir_cpf"
         elif resp in ["2", "não concordo", "nao concordo"]:
-            return "Entendemos perfeitamente. Como precisamos dos dados para agendamento, seu atendimento foi encerrado. A clínica agradece o contato e estamos de portas abertas! 👋", "fim"
+            return config.get('msg_despedida_lgpd', "Entendemos perfeitamente. Como precisamos dos dados para agendamento, seu atendimento foi encerrado. A clínica agradece o contato e estamos de portas abertas! 👋"), "fim"
         else:
             return "Por favor, responda com Concordo ou Não Concordo.", "validar_lgpd"
 
@@ -405,7 +399,7 @@ def processar_fluxo(conn, telefone, mensagem, etapa_atual, contexto):
 
         if not p:
             contexto["cpf_temp"] = digits
-            return "Vi que é seu primeiro acesso conosco! Para finalizar o seu cadastro, por favor, digite o seu *Nome Completo*:", "pedir_nome"
+            return config.get('msg_solicitar_nome', "Vi que é seu primeiro acesso conosco! Para finalizar o seu cadastro, por favor, digite o seu *Nome Completo*:"), "pedir_nome"
 
         id_paciente = p[0]
         with conn.cursor() as cur:
@@ -415,7 +409,7 @@ def processar_fluxo(conn, telefone, mensagem, etapa_atual, contexto):
             """, (id_paciente, telefone))
             conn.commit()
 
-        resultado_inicio = processar_fluxo(conn, telefone, mensagem, "inicio", contexto)
+        resultado_inicio = processar_fluxo(conn, telefone, mensagem, "inicio", contexto, config)
         resposta_inicio = resultado_inicio[0]
         botoes_inicio = resultado_inicio[2] if len(resultado_inicio) == 3 else []
         
@@ -445,7 +439,7 @@ def processar_fluxo(conn, telefone, mensagem, etapa_atual, contexto):
             """, (id_paciente, telefone))
             conn.commit()
             
-        resultado_inicio = processar_fluxo(conn, telefone, mensagem, "inicio", contexto)
+        resultado_inicio = processar_fluxo(conn, telefone, mensagem, "inicio", contexto, config)
         resposta_inicio = resultado_inicio[0]
         botoes_inicio = resultado_inicio[2] if len(resultado_inicio) == 3 else []
         return f"Cadastro concluído com sucesso, {nome.split()[0]}! " + resposta_inicio, "inicio", botoes_inicio
@@ -615,7 +609,11 @@ def webhook(payload: dict = Body(...)):
             else:
                 inicio_str = str(config.get("bot_inicio_funcionamento", "08:00"))[:5]
                 fim_str = str(config.get("bot_fim_funcionamento", "18:00"))[:5]
-                resposta_fora = MSG_FORA_HORARIO.format(inicio=inicio_str, fim=fim_str)
+                msg_fora = config.get("msg_fora_horario")
+                if msg_fora:
+                    resposta_fora = msg_fora.replace("{inicio}", inicio_str).replace("{fim}", fim_str)
+                else:
+                    resposta_fora = MSG_FORA_HORARIO.format(inicio=inicio_str, fim=fim_str)
 
             logger.info(f"Mensagem recebida fora do horário de {msg.telefone}. Registrada para acompanhamento.")
             
@@ -638,7 +636,7 @@ def webhook(payload: dict = Body(...)):
                 return {"status": "no_session_or_patient"}
 
         result = processar_fluxo(
-            conn, msg.telefone, msg.mensagem, etapa_atual, contexto
+            conn, msg.telefone, msg.mensagem, etapa_atual, contexto, config
         )
         if len(result) == 3:
             resposta, nova_etapa, botoes = result
