@@ -102,7 +102,7 @@
       text-transform: uppercase;
       letter-spacing: .04em;
     }
-    input, select {
+    input, select, textarea {
       width: 100%;
       padding: .6rem .85rem;
       background: var(--bg-input);
@@ -113,8 +113,9 @@
       font-size: .9rem;
       outline: none;
       transition: border-color var(--transition), box-shadow var(--transition);
+      resize: vertical;
     }
-    input:focus, select:focus {
+    input:focus, select:focus, textarea:focus {
       border-color: var(--info-s);
       box-shadow: 0 0 0 3px rgba(88,166,255,.15);
     }
@@ -653,6 +654,39 @@
           <label for="inp-tempo">Tempo Padrão de Consulta (minutos)</label>
           <input type="number" id="inp-tempo" min="10" max="180" step="5" placeholder="30" />
         </div>
+        </div>
+
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">📝 Textos e Respostas do Bot</div>
+        </div>
+        
+        <div class="form-group">
+          <label for="inp-msg-saudacao">Saudação Inicial (e Termos LGPD)</label>
+          <textarea id="inp-msg-saudacao" rows="6" placeholder="Mensagem de boas-vindas..."></textarea>
+        </div>
+        
+        <div class="form-group">
+          <label for="inp-msg-cpf">Solicitação de CPF</label>
+          <textarea id="inp-msg-cpf" rows="2" placeholder="Digite seu CPF..."></textarea>
+        </div>
+        
+        <div class="form-group">
+          <label for="inp-msg-nome">Solicitação de Nome (Novo Paciente)</label>
+          <textarea id="inp-msg-nome" rows="2" placeholder="Qual o seu nome?"></textarea>
+        </div>
+        
+        <div class="form-group">
+          <label for="inp-msg-lgpd">Despedida (Se não aceitar LGPD)</label>
+          <textarea id="inp-msg-lgpd" rows="3" placeholder="O atendimento foi encerrado..."></textarea>
+        </div>
+
+        <div class="form-group">
+          <label for="inp-msg-fora">Fora do Horário (Use {inicio} e {fim} para exibir as horas)</label>
+          <textarea id="inp-msg-fora" rows="3" placeholder="Nosso atendimento é das {inicio} às {fim}..."></textarea>
+        </div>
 
         <button class="btn btn-primary" onclick="salvarConfig()">
           💾 Salvar Configurações
@@ -1029,6 +1063,12 @@ async function loadConfig() {
     document.getElementById('inp-inicio').value = config.bot_inicio_funcionamento || '08:00';
     document.getElementById('inp-fim').value = config.bot_fim_funcionamento || '18:00';
     document.getElementById('inp-tempo').value = config.tempo_padrao_consulta_minutos || 30;
+    
+    document.getElementById('inp-msg-saudacao').value = config.msg_saudacao || '';
+    document.getElementById('inp-msg-cpf').value = config.msg_solicitar_cpf || '';
+    document.getElementById('inp-msg-nome').value = config.msg_solicitar_nome || '';
+    document.getElementById('inp-msg-lgpd').value = config.msg_despedida_lgpd || '';
+    document.getElementById('inp-msg-fora').value = config.msg_fora_horario || '';
   } catch (e) {
     console.error('Erro ao carregar config:', e);
   }
@@ -1047,7 +1087,12 @@ async function salvarConfig() {
       bot_ativo: document.getElementById('chk-bot-ativo').checked,
       bot_inicio_funcionamento: document.getElementById('inp-inicio').value,
       bot_fim_funcionamento: document.getElementById('inp-fim').value,
-      tempo_padrao_consulta_minutos: parseInt(document.getElementById('inp-tempo').value)
+      tempo_padrao_consulta_minutos: parseInt(document.getElementById('inp-tempo').value),
+      msg_saudacao: document.getElementById('inp-msg-saudacao').value,
+      msg_solicitar_cpf: document.getElementById('inp-msg-cpf').value,
+      msg_solicitar_nome: document.getElementById('inp-msg-nome').value,
+      msg_despedida_lgpd: document.getElementById('inp-msg-lgpd').value,
+      msg_fora_horario: document.getElementById('inp-msg-fora').value
     });
     al.className = 'alert success';
     al.textContent = '✅ Configurações salvas com sucesso!';
