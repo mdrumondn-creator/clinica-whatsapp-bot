@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException, Depends, Header, Body
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from psycopg2 import pool
@@ -21,6 +22,10 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
+
+@app.get("/")
+def serve_dashboard():
+    return FileResponse("admin_dashboard.html")
 
 # =========================================================
 # CORS (permite o painel admin acessar a API)
@@ -142,6 +147,11 @@ class ConfigUpdate(BaseModel):
     bot_inicio_funcionamento: Optional[str] = None  # "HH:MM"
     bot_fim_funcionamento: Optional[str] = None      # "HH:MM"
     tempo_padrao_consulta_minutos: Optional[int] = None
+    msg_saudacao: Optional[str] = None
+    msg_solicitar_cpf: Optional[str] = None
+    msg_despedida_lgpd: Optional[str] = None
+    msg_solicitar_nome: Optional[str] = None
+    msg_fora_horario: Optional[str] = None
 
 class LiberarAgenda(BaseModel):
     id_medico: int
@@ -799,6 +809,22 @@ def update_config(req: ConfigUpdate, user=Depends(admin_auth)):
         if req.tempo_padrao_consulta_minutos is not None:
             updates.append("tempo_padrao_consulta_minutos = %s")
             params.append(req.tempo_padrao_consulta_minutos)
+        
+        if req.msg_saudacao is not None:
+            updates.append("msg_saudacao = %s")
+            params.append(req.msg_saudacao)
+        if req.msg_solicitar_cpf is not None:
+            updates.append("msg_solicitar_cpf = %s")
+            params.append(req.msg_solicitar_cpf)
+        if req.msg_despedida_lgpd is not None:
+            updates.append("msg_despedida_lgpd = %s")
+            params.append(req.msg_despedida_lgpd)
+        if req.msg_solicitar_nome is not None:
+            updates.append("msg_solicitar_nome = %s")
+            params.append(req.msg_solicitar_nome)
+        if req.msg_fora_horario is not None:
+            updates.append("msg_fora_horario = %s")
+            params.append(req.msg_fora_horario)
 
         if not updates:
             raise HTTPException(status_code=400, detail="Nenhum campo para atualizar")
