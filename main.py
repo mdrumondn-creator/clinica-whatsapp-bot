@@ -328,12 +328,15 @@ def salvar_mensagem(conn, dados):
                 VALUES (%s, %s, %s, %s)
             """, (dados.telefone, dados.mensagem, direcao, dados.api_message_id))
         conn.commit()
+        return True
     except psycopg2.IntegrityError:
         conn.rollback()
         logger.warning(f"Mensagem duplicada ignorada: {dados.api_message_id}")
+        return False
     except Exception as e:
         conn.rollback()
         logger.error(f"Erro ao salvar mensagem: {e}")
+        return False
 
 
 # =========================================================
@@ -597,7 +600,8 @@ def webhook(payload: dict = Body(...)):
     conn = db_pool.getconn()
     try:
         # Salva a mensagem recebida
-        salvar_mensagem(conn, msg)
+        if not salvar_mensagem(conn, msg):
+            return {"status": "already_processed_or_error"}
 
         # Filtro de segurança: ignorar mensagens de saída
         if msg.direcao and msg.direcao.upper() in ('SAIDA', 'OUTBOUND', 'OUTGOING', 'SENT'):
