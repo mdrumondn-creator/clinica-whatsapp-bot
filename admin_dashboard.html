@@ -742,6 +742,26 @@
           <textarea id="inp-msg-fora" rows="3" placeholder="Nosso atendimento é das {inicio} às {fim}..."></textarea>
         </div>
 
+        <div style="margin: 1.25rem 0 .75rem; border-top: 1px solid var(--border); padding-top: 1.25rem;">
+          <div class="card-title" style="margin-bottom: 1rem;">🔔 Mensagens de Lembrete Automático</div>
+          <div class="alert info" style="margin-bottom:1rem; font-size:.82rem;">
+            ℹ️ Use <code style="background:rgba(255,255,255,.1);padding:.1rem .3rem;border-radius:4px;">{nome}</code>, 
+            <code style="background:rgba(255,255,255,.1);padding:.1rem .3rem;border-radius:4px;">{medico}</code>, 
+            <code style="background:rgba(255,255,255,.1);padding:.1rem .3rem;border-radius:4px;">{data}</code> e 
+            <code style="background:rgba(255,255,255,.1);padding:.1rem .3rem;border-radius:4px;">{hora}</code> como variáveis dinâmicas.
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="inp-msg-lembrete-24h">📅 Lembrete 24h Antes da Consulta</label>
+          <textarea id="inp-msg-lembrete-24h" rows="5" placeholder="Olá, {nome}! Você tem consulta com *{medico}* amanhã, *{data}*..."></textarea>
+        </div>
+
+        <div class="form-group">
+          <label for="inp-msg-lembrete-dia">☀️ Lembrete no Dia da Consulta (enviado às 07:30)</label>
+          <textarea id="inp-msg-lembrete-dia" rows="5" placeholder="Bom dia, {nome}! Hoje é o dia da sua consulta com *{medico}* às *{hora}*..."></textarea>
+        </div>
+
         <button class="btn btn-primary" onclick="salvarConfig()">
           💾 Salvar Configurações
         </button>
@@ -1152,6 +1172,8 @@ async function loadConfig() {
     document.getElementById('inp-msg-nome').value = config.msg_solicitar_nome || '';
     document.getElementById('inp-msg-lgpd').value = config.msg_despedida_lgpd || '';
     document.getElementById('inp-msg-fora').value = config.msg_fora_horario || '';
+    document.getElementById('inp-msg-lembrete-24h').value = config.msg_lembrete_24h || '';
+    document.getElementById('inp-msg-lembrete-dia').value = config.msg_lembrete_dia || '';
   } catch (e) {
     console.error('Erro ao carregar config:', e);
   }
@@ -1175,7 +1197,9 @@ async function salvarConfig() {
       msg_solicitar_cpf: document.getElementById('inp-msg-cpf').value,
       msg_solicitar_nome: document.getElementById('inp-msg-nome').value,
       msg_despedida_lgpd: document.getElementById('inp-msg-lgpd').value,
-      msg_fora_horario: document.getElementById('inp-msg-fora').value
+      msg_fora_horario: document.getElementById('inp-msg-fora').value,
+      msg_lembrete_24h: document.getElementById('inp-msg-lembrete-24h').value,
+      msg_lembrete_dia: document.getElementById('inp-msg-lembrete-dia').value
     });
     al.className = 'alert success';
     al.textContent = '✅ Configurações salvas com sucesso!';

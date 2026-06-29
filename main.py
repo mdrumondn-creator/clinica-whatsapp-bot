@@ -273,6 +273,8 @@ class ConfigUpdate(BaseModel):
     msg_despedida_lgpd: Optional[str] = None
     msg_solicitar_nome: Optional[str] = None
     msg_fora_horario: Optional[str] = None
+    msg_lembrete_24h: Optional[str] = None
+    msg_lembrete_dia: Optional[str] = None
 
 class LiberarAgenda(BaseModel):
     id_medico: int
@@ -961,6 +963,12 @@ def update_config(req: ConfigUpdate, user=Depends(admin_auth)):
         if req.msg_fora_horario is not None:
             updates.append("msg_fora_horario = %s")
             params.append(req.msg_fora_horario)
+        if req.msg_lembrete_24h is not None:
+            updates.append("msg_lembrete_24h = %s")
+            params.append(req.msg_lembrete_24h)
+        if req.msg_lembrete_dia is not None:
+            updates.append("msg_lembrete_dia = %s")
+            params.append(req.msg_lembrete_dia)
 
         if not updates:
             raise HTTPException(status_code=400, detail="Nenhum campo para atualizar")
