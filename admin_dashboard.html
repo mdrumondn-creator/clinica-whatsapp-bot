@@ -1328,39 +1328,46 @@ async function loadConexao() {
   containerConnected.style.display = 'none';
   loading.style.display = 'block';
   badge.className = 'badge yellow dot';
-  badge.textContent = 'Verificando...';
+  badge.textContent = 'Verificando API...';
 
   try {
     const data = await api('GET', '/api/admin/whatsapp/status');
     loading.style.display = 'none';
 
+    if (!data || !data.status) {
+      throw new Error("Resposta inválida do servidor");
+    }
+
     if (data.status === 'conectado') {
       badge.className = 'badge green dot';
       badge.textContent = 'Conectado';
       containerConnected.style.display = 'block';
+    } else if (data.status === 'erro') {
+      badge.className = 'badge red dot';
+      badge.textContent = 'Falha na Evolution API';
+      toast('A API do WhatsApp não respondeu: ' + (data.message || ''), 'error');
     } else {
       badge.className = 'badge red dot';
       badge.textContent = 'Desconectado';
       // Fetch QR Code
-      const qrData = await api('GET', '/api/admin/whatsapp/qrcode');
+      const qrData = await api('GET', '/api/admin/whatsapp/qrcode').catch(e => ({ error: e.message }));
       if (qrData && qrData.base64) {
         document.getElementById('conexao-qr-img').src = qrData.base64;
         containerQr.style.display = 'block';
-        // Auto refresh until connected
         conexaoInterval = setInterval(async () => {
           if (currentPage !== 'conexao') { clearInterval(conexaoInterval); return; }
-          const st = await api('GET', '/api/admin/whatsapp/status');
-          if (st.status === 'conectado') { clearInterval(conexaoInterval); loadConexao(); }
+          const st = await api('GET', '/api/admin/whatsapp/status').catch(() => null);
+          if (st && st.status === 'conectado') { clearInterval(conexaoInterval); loadConexao(); }
         }, 5000);
       } else {
-        toast('Erro ao buscar QR Code', 'error');
+        toast('Não foi possível gerar QR Code: ' + (qrData.error || ''), 'error');
       }
     }
   } catch (e) {
     loading.style.display = 'none';
     badge.className = 'badge red dot';
-    badge.textContent = 'Erro de API';
-    toast('Erro: ' + e.message, 'error');
+    badge.textContent = 'Erro de Rede';
+    toast('Erro de Conexão: ' + e.message, 'error');
   }
 }
 
