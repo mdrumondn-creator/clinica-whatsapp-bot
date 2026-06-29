@@ -177,6 +177,16 @@
       cursor: pointer; accent-color: var(--accent-s);
     }
 
+    
+    .material-symbols-rounded {
+      font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      vertical-align: middle;
+      font-size: 1.2em; /* scale slightly with text */
+    }
+
     /* ===================== BUTTONS ===================== */
     .btn {
       display: inline-flex; align-items: center; justify-content: center; gap: .5rem;
@@ -364,8 +374,8 @@
       line-height: 1;
       color: currentColor;
     }
-    .stat-icon-watermark svg {
-      width: 2.5rem; height: 2.5rem;
+    .stat-icon-watermark .material-symbols-rounded {
+      font-size: 3rem;
     }
     .stat-card.green::before { background: linear-gradient(90deg, #0ea5e9, #38bdf8); }
     .stat-card.blue::before { background: linear-gradient(90deg, #6366f1, #a5b4fc); }
@@ -585,7 +595,7 @@
       50% { opacity: .5; transform: scale(.75); }
     }
   </style>
-  <script src="https://unpkg.com/lucide@latest"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
 </head>
 <body>
 
@@ -593,11 +603,11 @@
 <div id="login-screen" style="display:none;">
   <div class="login-card animate-in">
     <div class="login-logo">
-      <div class="icon-wrap"><i data-lucide="hospital"></i></div>
+      <div class="icon-wrap"><span class="material-symbols-rounded">local_hospital</span></div>
       <h1>Clínica Bot</h1>
       <p>Painel Administrativo</p>
     </div>
-    <div id="login-alert" class="alert error hidden"><i data-lucide="x-circle"></i> Credenciais inválidas. Tente novamente.</div>
+    <div id="login-alert" class="alert error hidden"><span class="material-symbols-rounded">cancel</span> Credenciais inválidas. Tente novamente.</div>
     <div class="form-group">
       <label for="inp-login">Usuário</label>
       <input id="inp-login" type="text" placeholder="seu.login" autocomplete="username" />
@@ -618,34 +628,34 @@
   <!-- Sidebar -->
   <aside class="sidebar">
     <div class="sidebar-header">
-      <h2><span class="logo-dot"><i data-lucide="hospital"></i></span> Clínica Bot</h2>
+      <h2><span class="logo-dot"><span class="material-symbols-rounded">local_hospital</span></span> Clínica Bot</h2>
       <p>Painel Administrativo</p>
     </div>
     <nav class="sidebar-nav">
       <div class="nav-section-label">Principal</div>
       <div class="nav-item active" id="nav-dashboard" onclick="showPage('dashboard')">
-        <span class="icon"><i data-lucide="layout-dashboard"></i></span> Dashboard
+        <span class="icon"><span class="material-symbols-rounded">space_dashboard</span></span> Dashboard
       </div>
       <div class="nav-item" id="nav-consultas" onclick="showPage('consultas')">
-        <span class="icon"><i data-lucide="clipboard-list"></i></span> Consultas
+        <span class="icon"><span class="material-symbols-rounded">content_paste</span></span> Consultas
       </div>
       <div class="nav-item" id="nav-mensagens" onclick="showPage('mensagens')">
-        <span class="icon"><i data-lucide="message-circle"></i></span> Mensagens
+        <span class="icon"><span class="material-symbols-rounded">chat</span></span> Mensagens
         <span class="badge red" id="badge-msgs" style="margin-left:auto;display:none;">0</span>
       </div>
       <div class="nav-section-label">Gestão</div>
       <div class="nav-item" id="nav-agenda" onclick="showPage('agenda')">
-        <span class="icon"><i data-lucide="calendar"></i></span> Agenda
+        <span class="icon"><span class="material-symbols-rounded">calendar_month</span></span> Agenda
       </div>
       <div class="nav-item" id="nav-medicos" onclick="showPage('medicos')">
-        <span class="icon"><i data-lucide="stethoscope"></i></span> Médicos
+        <span class="icon"><span class="material-symbols-rounded">stethoscope</span></span> Médicos
       </div>
       <div class="nav-section-label">Sistema</div>
       <div class="nav-item" id="nav-conexao" onclick="showPage('conexao')">
-        <span class="icon"><i data-lucide="smartphone"></i></span> Conexão
+        <span class="icon"><span class="material-symbols-rounded">smartphone</span></span> Conexão
       </div>
       <div class="nav-item" id="nav-config" onclick="showPage('config')">
-        <span class="icon"><i data-lucide="settings"></i></span> Controle do Bot
+        <span class="icon"><span class="material-symbols-rounded">settings</span></span> Controle do Bot
       </div>
     </nav>
     <div class="sidebar-footer">
@@ -657,7 +667,7 @@
         </div>
       </div>
       <button class="btn btn-ghost btn-full" onclick="doLogout()" style="font-size:.8rem;padding:.4rem;">
-        🚪 Sair
+        <span class="material-symbols-rounded">logout</span> Sair
       </button>
     </div>
   </aside>
@@ -670,8 +680,8 @@
         <div id="bot-pill" class="bot-status-pill away">
           <span class="pulse"></span> Verificando...
         </div>
-        <button class="btn btn-ghost" onclick="toggleTheme()" title="Alternar Modo Claro/Escuro">🌓</button>
-        <button class="btn btn-ghost" onclick="refreshCurrentPage()" title="Atualizar"><i data-lucide="refresh-cw"></i></button>
+        <button class="btn btn-ghost" onclick="toggleTheme()" title="Alternar Modo Claro/Escuro"><span class="material-symbols-rounded">dark_mode</span></button>
+        <button class="btn btn-ghost" onclick="refreshCurrentPage()" title="Atualizar"><span class="material-symbols-rounded">refresh</span></button>
       </div>
     </div>
 
@@ -679,25 +689,25 @@
     <div class="page active animate-in" id="page-dashboard">
       <div class="stats-grid" id="stats-grid">
         <div class="stat-card green" style="cursor:pointer;" onclick="showPage('consultas')">
-          <div class="stat-icon-watermark"><i data-lucide="clipboard-list"></i></div>
+          <div class="stat-icon-watermark"><span class="material-symbols-rounded">content_paste</span></div>
           <div class="stat-label">Consultas Hoje</div>
           <div class="stat-value" id="stat-consultas">—</div>
           <div class="stat-sub">agendadas/confirmadas</div>
         </div>
         <div class="stat-card blue" style="cursor:pointer;" onclick="showPage('agenda')">
-          <div class="stat-icon-watermark"><i data-lucide="calendar"></i></div>
+          <div class="stat-icon-watermark"><span class="material-symbols-rounded">calendar_month</span></div>
           <div class="stat-label">Horários Livres</div>
           <div class="stat-value" id="stat-livres">—</div>
           <div class="stat-sub">disponíveis hoje</div>
         </div>
         <div class="stat-card yellow" style="cursor:pointer;" onclick="showPage('mensagens')">
-          <div class="stat-icon-watermark"><i data-lucide="message-circle"></i></div>
+          <div class="stat-icon-watermark"><span class="material-symbols-rounded">chat</span></div>
           <div class="stat-label">Mensagens Hoje</div>
           <div class="stat-value" id="stat-msgs">—</div>
           <div class="stat-sub">recebidas pelo bot</div>
         </div>
         <div class="stat-card red" style="cursor:pointer;" onclick="showPage('medicos')">
-          <div class="stat-icon-watermark"><i data-lucide="stethoscope"></i></div>
+          <div class="stat-icon-watermark"><span class="material-symbols-rounded">stethoscope</span></div>
           <div class="stat-label">Médicos Ativos</div>
           <div class="stat-value" id="stat-medicos">—</div>
           <div class="stat-sub">cadastrados</div>
@@ -707,8 +717,8 @@
       <!-- Gráfico de Atendimentos -->
       <div class="card" style="margin-top:1.25rem;">
         <div class="card-header">
-          <div class="card-title">📈 Atendimentos por Dia <span style="font-size:.75rem;color:var(--text-3);font-weight:400;">(últimos 7 + próximos 14 dias)</span></div>
-          <button class="btn btn-ghost" style="font-size:.75rem;padding:.35rem .7rem;" onclick="loadChart()"><i data-lucide="refresh-cw"></i></button>
+          <div class="card-title"><span class="material-symbols-rounded">trending_up</span> Atendimentos por Dia <span style="font-size:.75rem;color:var(--text-3);font-weight:400;">(últimos 7 + próximos 14 dias)</span></div>
+          <button class="btn btn-ghost" style="font-size:.75rem;padding:.35rem .7rem;" onclick="loadChart()"><span class="material-symbols-rounded">refresh</span></button>
         </div>
         <div style="position:relative;height:220px;">
           <canvas id="chart-agenda"></canvas>
@@ -718,7 +728,7 @@
 
       <div class="card">
         <div class="card-header">
-          <div class="card-title"><i data-lucide="calendar"></i> Próximos Agendamentos</div>
+          <div class="card-title"><span class="material-symbols-rounded">calendar_month</span> Próximos Agendamentos</div>
           <button class="btn btn-ghost" onclick="showPage('agenda')" style="font-size:.8rem;">Ver tudo →</button>
         </div>
         <div class="table-wrap">
@@ -744,7 +754,7 @@
     <div class="page animate-in" id="page-conexao">
       <div class="card" style="max-width: 500px; margin: 0 auto; text-align: center;">
         <div class="card-header" style="justify-content:center; flex-direction:column; gap:1rem; padding-bottom:1rem; border-bottom:1px solid var(--border); margin-bottom:1.5rem;">
-          <div class="card-title" style="font-size:1.2rem;"><i data-lucide="smartphone"></i> Status do WhatsApp</div>
+          <div class="card-title" style="font-size:1.2rem;"><span class="material-symbols-rounded">smartphone</span> Status do WhatsApp</div>
           <div id="conexao-status-badge" class="badge dot" style="font-size:.9rem; padding:.4rem 1rem;">Verificando...</div>
         </div>
 
@@ -760,15 +770,15 @@
           <div style="background:#fff; padding:1rem; border-radius:12px; display:inline-block; margin-bottom:1rem; border:1px solid var(--border);">
             <img id="conexao-qr-img" src="" alt="QR Code" style="width:250px; height:250px;" />
           </div>
-          <button class="btn btn-ghost btn-full" onclick="loadConexao()"><i data-lucide="refresh-cw"></i> Atualizar QR Code</button>
+          <button class="btn btn-ghost btn-full" onclick="loadConexao()"><span class="material-symbols-rounded">refresh</span> Atualizar QR Code</button>
         </div>
 
         <div id="conexao-connected-container" style="display:none;">
-          <div style="margin-bottom:1rem; color: #34d399;"><i data-lucide="check-circle-2" style="width:64px; height:64px;"></i></div>
+          <div style="margin-bottom:1rem; color: #34d399;"><span class="material-symbols-rounded" style="font-size: 64px;">check_circle</span></div>
           <p style="color:var(--text-1); font-weight:600; font-size:1.1rem; margin-bottom:.5rem;">WhatsApp conectado com sucesso!</p>
           <p style="color:var(--text-3); font-size:.85rem; margin-bottom:2rem;">O número da clínica está vinculado ao sistema.</p>
           
-          <button class="btn btn-danger btn-full" onclick="desconectarWhatsapp()"><i data-lucide="unplug"></i> Desconectar WhatsApp</button>
+          <button class="btn btn-danger btn-full" onclick="desconectarWhatsapp()"><span class="material-symbols-rounded">power_off</span> Desconectar WhatsApp</button>
         </div>
       </div>
     </div>
@@ -777,7 +787,7 @@
     <div class="page animate-in" id="page-config">
       <div class="card">
         <div class="card-header">
-          <div class="card-title"><i data-lucide="settings"></i> Controle de Funcionamento do Bot</div>
+          <div class="card-title"><span class="material-symbols-rounded">settings</span> Controle de Funcionamento do Bot</div>
         </div>
 
         <div id="config-alert" class="alert hidden"></div>
@@ -821,7 +831,7 @@
         
         <div class="form-group">
           <label for="inp-msg-saudacao">Saudação Inicial (e Termos LGPD)</label>
-          <textarea id="inp-msg-saudacao" rows="6" placeholder="Olá! Seja bem-vindo(a) ao atendimento virtual da nossa clínica! <i data-lucide="hospital"></i>&#10;&#10;Para seguirmos com o seu agendamento, precisamos de alguns dados. Você concorda com os termos de tratamento dos seus dados (LGPD)?"></textarea>
+          <textarea id="inp-msg-saudacao" rows="6" placeholder="Olá! Seja bem-vindo(a) ao atendimento virtual da nossa clínica! <span class="material-symbols-rounded">local_hospital</span>&#10;&#10;Para seguirmos com o seu agendamento, precisamos de alguns dados. Você concorda com os termos de tratamento dos seus dados (LGPD)?"></textarea>
         </div>
         
         <div class="form-group">
@@ -860,7 +870,7 @@
             </div>
             <div class="form-group">
               <label>Modo de Exibição</label>
-              <button class="btn btn-ghost" style="border:1px solid var(--border);" onclick="toggleTheme()">🌓 Alternar Claro/Escuro</button>
+              <button class="btn btn-ghost" style="border:1px solid var(--border);" onclick="toggleTheme()"><span class="material-symbols-rounded">dark_mode</span> Alternar Claro/Escuro</button>
             </div>
           </div>
         </div>
@@ -880,7 +890,7 @@
         </div>
 
         <div class="form-group">
-          <label for="inp-msg-lembrete-24h"><i data-lucide="calendar"></i> Lembrete 24h Antes da Consulta</label>
+          <label for="inp-msg-lembrete-24h"><span class="material-symbols-rounded">calendar_month</span> Lembrete 24h Antes da Consulta</label>
           <textarea id="inp-msg-lembrete-24h" rows="5" placeholder="Olá, {nome}! Você tem consulta com *{medico}* amanhã, *{data}*..."></textarea>
         </div>
 
@@ -896,13 +906,13 @@
 
       <div class="card">
         <div class="card-header">
-          <div class="card-title"><i data-lucide="clipboard-list"></i> Regras Importantes</div>
+          <div class="card-title"><span class="material-symbols-rounded">content_paste</span> Regras Importantes</div>
         </div>
         <ul style="list-style:none;display:flex;flex-direction:column;gap:.6rem;color:var(--text-2);font-size:.875rem;">
           <li>🟢 <strong style="color:var(--text-1)">Bot Ativo dentro do horário:</strong> responde automaticamente no WhatsApp.</li>
           <li>🟡 <strong style="color:var(--text-1)">Bot Ativo fora do horário:</strong> informa o paciente e registra a mensagem para a equipe.</li>
           <li>🔴 <strong style="color:var(--text-1)">Bot Desativado (Kill-switch):</strong> nenhuma resposta automática — controle total pela equipe.</li>
-          <li><i data-lucide="user"></i> <strong style="color:var(--text-1)">Ações administrativas</strong> (liberar agenda, cadastrar médico) só estão disponíveis aqui neste painel.</li>
+          <li><span class="material-symbols-rounded">person</span> <strong style="color:var(--text-1)">Ações administrativas</strong> (liberar agenda, cadastrar médico) só estão disponíveis aqui neste painel.</li>
         </ul>
       </div>
     </div>
@@ -918,7 +928,7 @@
             <button class="btn btn-primary" style="font-size:.8rem;" onclick="abrirModalAgendamentoManual()">➕ Agendar Manual</button>
             <button class="btn btn-ghost"   style="font-size:.8rem;" onclick="exportarCSV()">📥 Exportar CSV</button>
             <button class="btn btn-ghost"   style="font-size:.8rem;" onclick="exportarPDF()">🖨️ Imprimir / PDF</button>
-            <button class="btn btn-ghost"   style="font-size:.8rem;" onclick="loadConsultas()"><i data-lucide="refresh-cw"></i> Atualizar</button>
+            <button class="btn btn-ghost"   style="font-size:.8rem;" onclick="loadConsultas()"><span class="material-symbols-rounded">refresh</span> Atualizar</button>
           </div>
         </div>
         <div class="grid-2" style="gap:.75rem;">
@@ -936,7 +946,7 @@
 
       <div class="card" id="card-consultas-print">
         <div class="card-header">
-          <div class="card-title"><i data-lucide="clipboard-list"></i> Consultas</div>
+          <div class="card-title"><span class="material-symbols-rounded">content_paste</span> Consultas</div>
         </div>
         <div class="table-wrap">
           <table id="tbl-consultas">
@@ -987,7 +997,7 @@
             <option value="">— Selecione um horário —</option>
           </select>
         </div>
-        <button class="btn btn-primary btn-full" onclick="confirmarAgendamentoManual()"><i data-lucide="check-circle-2"></i> Confirmar Agendamento</button>
+        <button class="btn btn-primary btn-full" onclick="confirmarAgendamentoManual()"><span class="material-symbols-rounded">check_circle</span> Confirmar Agendamento</button>
       </div>
     </div>
 
@@ -996,7 +1006,7 @@
     <div class="page animate-in" id="page-agenda">
       <div class="card">
         <div class="card-header">
-          <div class="card-title"><i data-lucide="calendar"></i> Liberar Novos Horários</div>
+          <div class="card-title"><span class="material-symbols-rounded">calendar_month</span> Liberar Novos Horários</div>
         </div>
         <div class="grid-2" style="margin-bottom:1rem;">
           <div class="form-group" style="margin-bottom:0;">
@@ -1023,8 +1033,8 @@
 
       <div class="card">
         <div class="card-header">
-          <div class="card-title"><i data-lucide="calendar-days"></i> Agenda Futura</div>
-          <button class="btn btn-ghost" onclick="loadAgenda()" style="font-size:.8rem;"><i data-lucide="refresh-cw"></i> Atualizar</button>
+          <div class="card-title"><span class="material-symbols-rounded">calendar_today</span> Agenda Futura</div>
+          <button class="btn btn-ghost" onclick="loadAgenda()" style="font-size:.8rem;"><span class="material-symbols-rounded">refresh</span> Atualizar</button>
         </div>
         <div class="table-wrap">
           <table>
@@ -1098,8 +1108,8 @@
 
       <div class="card">
         <div class="card-header">
-          <div class="card-title"><i data-lucide="stethoscope"></i> Médicos Cadastrados</div>
-          <button class="btn btn-ghost" onclick="loadMedicos()" style="font-size:.8rem;"><i data-lucide="refresh-cw"></i> Atualizar</button>
+          <div class="card-title"><span class="material-symbols-rounded">stethoscope</span> Médicos Cadastrados</div>
+          <button class="btn btn-ghost" onclick="loadMedicos()" style="font-size:.8rem;"><span class="material-symbols-rounded">refresh</span> Atualizar</button>
         </div>
         <div class="table-wrap">
           <table>
@@ -1126,8 +1136,8 @@
     <div class="page animate-in" id="page-mensagens">
       <div class="card">
         <div class="card-header">
-          <div class="card-title"><i data-lucide="message-circle"></i> Mensagens Recebidas Hoje</div>
-          <button class="btn btn-ghost" onclick="loadMensagens()" style="font-size:.8rem;"><i data-lucide="refresh-cw"></i> Atualizar</button>
+          <div class="card-title"><span class="material-symbols-rounded">chat</span> Mensagens Recebidas Hoje</div>
+          <button class="btn btn-ghost" onclick="loadMensagens()" style="font-size:.8rem;"><span class="material-symbols-rounded">refresh</span> Atualizar</button>
         </div>
         <div id="msgs-container">
           <div class="loading-row" style="text-align:center;padding:2rem;color:var(--text-3);">
@@ -1220,8 +1230,7 @@ function api(method, path, body) {
 function toast(msg, type = 'success') {
   const el = document.getElementById('toast');
   el.className = 'show ' + type;
-  el.innerHTML = (type === 'success' ? '<i data-lucide="check-circle-2"></i> ' : '<i data-lucide="x-circle"></i> ') + msg;
-  lucide.createIcons();
+  el.innerHTML = (type === 'success' ? '<span class="material-symbols-rounded">check_circle</span> ' : '<span class="material-symbols-rounded">cancel</span> ') + msg;
   setTimeout(() => { el.classList.remove('show'); }, 3500);
 }
 
@@ -1273,9 +1282,8 @@ async function doLogin() {
     await Promise.all([loadDashboard(), loadConfig(), loadMedicos(), loadAgenda(), loadConsultas(), loadMensagens(), loadConexao()]);
   } catch (e) {
     alert.className = 'alert error';
-    alert.innerHTML = '<i data-lucide="x-circle"></i> ' + e.message;
-    lucide.createIcons();
-  } finally {
+    alert.innerHTML = '<span class="material-symbols-rounded">cancel</span> ' + e.message;
+    } finally {
     btn.innerHTML = 'Entrar';
     btn.disabled = false;
   }
@@ -1314,7 +1322,6 @@ function showPage(name) {
   };
   document.getElementById('page-title').textContent = titles[name] || name;
   refreshCurrentPage();
-  lucide.createIcons();
 }
 
 function refreshCurrentPage() {
@@ -1566,13 +1573,13 @@ async function salvarConfig() {
       msg_lembrete_dia: document.getElementById('inp-msg-lembrete-dia').value
     });
     al.className = 'alert success';
-    al.textContent = '<i data-lucide="check-circle-2"></i> Configurações salvas com sucesso!';
+    al.textContent = '<span class="material-symbols-rounded">check_circle</span> Configurações salvas com sucesso!';
     toast('Configurações atualizadas!', 'success');
     updateBotPill();
     setTimeout(() => al.className = 'alert hidden', 4000);
   } catch (e) {
     al.className = 'alert error';
-    al.textContent = '<i data-lucide="x-circle"></i> Erro: ' + e.message;
+    al.textContent = '<span class="material-symbols-rounded">cancel</span> Erro: ' + e.message;
   }
 }
 
@@ -1585,14 +1592,14 @@ async function loadMedicos() {
     sel.innerHTML = '<option value="">— Selecione —</option>';
 
     if (data.medicos.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><div class="icon"><i data-lucide="stethoscope"></i></div><p>Nenhum médico cadastrado</p></div></td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="5"><div class="empty-state"><div class="icon"><span class="material-symbols-rounded">stethoscope</span></div><p>Nenhum médico cadastrado</p></div></td></tr>`;
     } else {
       tbody.innerHTML = data.medicos.map(m => `
         <tr>
           <td>
             <div style="display:flex;align-items:center;gap:.5rem;">
               <div style="width:40px;height:40px;border-radius:50%;background:var(--bg-base);overflow:hidden;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;">
-                ${m.foto_base64 ? `<img src="${m.foto_base64}" style="width:100%;height:100%;object-fit:cover;" />` : `<span style="font-size:1.2rem;"><i data-lucide="stethoscope"></i></span>`}
+                ${m.foto_base64 ? `<img src="${m.foto_base64}" style="width:100%;height:100%;object-fit:cover;" />` : `<span style="font-size:1.2rem;"><span class="material-symbols-rounded">stethoscope</span></span>`}
               </div>
               <button class="btn btn-ghost" style="padding:.2rem .4rem;font-size:.7rem;" onclick="document.getElementById('file-foto-${m.id_medico}').click()">📷 Alterar</button>
               <input type="file" id="file-foto-${m.id_medico}" accept="image/jpeg,image/png" style="display:none;" onchange="uploadFotoMedico(${m.id_medico}, this)" />
@@ -1637,13 +1644,13 @@ async function cadastrarMedico() {
       email: document.getElementById('inp-m-email').value.trim() || null,
       tempo_padrao_minutos: parseInt(document.getElementById('inp-m-tempo').value) || 30
     });
-    al.className = 'alert success'; al.textContent = '<i data-lucide="check-circle-2"></i> Médico cadastrado com sucesso!';
+    al.className = 'alert success'; al.textContent = '<span class="material-symbols-rounded">check_circle</span> Médico cadastrado com sucesso!';
     toast('Médico cadastrado!', 'success');
     ['inp-m-nome','inp-m-esp','inp-m-crm','inp-m-tel','inp-m-email'].forEach(id => document.getElementById(id).value = '');
     loadMedicos();
     setTimeout(() => al.className = 'alert hidden', 4000);
   } catch (e) {
-    al.className = 'alert error'; al.textContent = '<i data-lucide="x-circle"></i> ' + e.message;
+    al.className = 'alert error'; al.textContent = '<span class="material-symbols-rounded">cancel</span> ' + e.message;
   }
 }
 
@@ -1720,9 +1727,9 @@ async function liberarAgenda() {
     const data = await api('POST', '/api/admin/agenda/liberar', { id_medico: parseInt(medico), slots });
     if (data.erros && data.erros.length > 0) {
       al.className = 'alert error';
-      al.innerHTML = `<i data-lucide="x-circle"></i> ${data.criados} criados, ${data.erros.length} erro(s):<br>` + data.erros.map(e => `• ${e}`).join('<br>');
+      al.innerHTML = `<span class="material-symbols-rounded">cancel</span> ${data.criados} criados, ${data.erros.length} erro(s):<br>` + data.erros.map(e => `• ${e}`).join('<br>');
     } else {
-      al.className = 'alert success'; al.textContent = `<i data-lucide="check-circle-2"></i> ${data.criados} horário(s) liberado(s) com sucesso!`;
+      al.className = 'alert success'; al.textContent = `<span class="material-symbols-rounded">check_circle</span> ${data.criados} horário(s) liberado(s) com sucesso!`;
       toast(`${data.criados} horário(s) liberado(s)!`, 'success');
       document.getElementById('slots-container').innerHTML = '';
       slotCount = 0;
@@ -1730,7 +1737,7 @@ async function liberarAgenda() {
     loadAgenda();
     setTimeout(() => al.className = 'alert hidden', 6000);
   } catch (e) {
-    al.className = 'alert error'; al.textContent = '<i data-lucide="x-circle"></i> ' + e.message;
+    al.className = 'alert error'; al.textContent = '<span class="material-symbols-rounded">cancel</span> ' + e.message;
   }
 }
 
@@ -1785,7 +1792,7 @@ async function loadConsultas() {
           <td>${statusBadge(c.status)}</td>
           <td class="no-print">
             ${c.status === 'AGENDADA' || c.status === 'CONFIRMADA'
-              ? `<button class="btn btn-ghost" style="color:var(--danger);font-size:.75rem;padding:.3rem .5rem;" onclick="event.stopPropagation(); cancelarConsulta(${c.id_consulta})"><i data-lucide="x-circle"></i> Cancelar</button>`
+              ? `<button class="btn btn-ghost" style="color:var(--danger);font-size:.75rem;padding:.3rem .5rem;" onclick="event.stopPropagation(); cancelarConsulta(${c.id_consulta})"><span class="material-symbols-rounded">cancel</span> Cancelar</button>`
               : ''}
           </td>
         </tr>
@@ -1861,13 +1868,13 @@ async function confirmarAgendamentoManual() {
       nome_paciente: nome || null
     });
     document.getElementById('modal-agendamento').style.display = 'none';
-    toast('Consulta agendada com sucesso! <i data-lucide="check-circle-2"></i>', 'success');
+    toast('Consulta agendada com sucesso! <span class="material-symbols-rounded">check_circle</span>', 'success');
     loadConsultas();
     loadAgenda();
     loadDashboard();
   } catch(e) {
     al.className = 'alert error';
-    al.textContent = '<i data-lucide="x-circle"></i> ' + e.message;
+    al.textContent = '<span class="material-symbols-rounded">cancel</span> ' + e.message;
   }
 }
 
@@ -1919,15 +1926,15 @@ async function loadMensagens() {
     const data = await api('GET', '/api/admin/mensagens-pendentes');
     const container = document.getElementById('msgs-container');
     if (data.mensagens.length === 0) {
-      container.innerHTML = `<div class="empty-state"><div class="icon"><i data-lucide="message-circle"></i></div><p>Nenhuma mensagem recebida hoje</p></div>`;
+      container.innerHTML = `<div class="empty-state"><div class="icon"><span class="material-symbols-rounded">chat</span></div><p>Nenhuma mensagem recebida hoje</p></div>`;
     } else {
       container.innerHTML = data.mensagens.map(m => `
         <div class="msg-card">
           <div class="msg-header">
-            <span class="msg-phone"><i data-lucide="smartphone"></i> ${m.telefone_remetente}</span>
+            <span class="msg-phone"><span class="material-symbols-rounded">smartphone</span> ${m.telefone_remetente}</span>
             <span class="msg-time">${fmtDatetime(m.created_at)}</span>
           </div>
-          <div class="msg-name"><i data-lucide="user"></i> ${m.paciente_nome || 'Paciente não identificado'}</div>
+          <div class="msg-name"><span class="material-symbols-rounded">person</span> ${m.paciente_nome || 'Paciente não identificado'}</div>
           <div class="msg-text">${m.mensagem || '<em style="color:var(--text-3)">mensagem vazia</em>'}</div>
         </div>
       `).join('');
@@ -1967,7 +1974,7 @@ setInterval(() => {
   <div class="card" style="width: 100%; max-width: 500px; margin: 1rem; position: relative; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
     <button onclick="document.getElementById('modal-paciente').style.display='none'" style="position:absolute;top:1rem;right:1rem;background:none;border:none;color:var(--text-1);font-size:1.5rem;cursor:pointer;">&times;</button>
     <div class="card-header" style="border-bottom: 1px solid var(--border); padding-bottom: .5rem; margin-bottom: 1rem;">
-      <div class="card-title"><i data-lucide="user"></i> Ficha do Paciente</div>
+      <div class="card-title"><span class="material-symbols-rounded">person</span> Ficha do Paciente</div>
     </div>
     <div style="margin-bottom: 1.5rem; color: var(--text-2); line-height: 1.6; font-size: .9rem;">
       <p><strong style="color:var(--text-1)">Nome:</strong> <span id="modal-pac-nome"></span></p>
@@ -1975,7 +1982,7 @@ setInterval(() => {
       <p><strong style="color:var(--text-1)">CPF:</strong> <span id="modal-pac-cpf"></span></p>
     </div>
     <div class="card-header" style="border-bottom: 1px solid var(--border); padding-bottom: .5rem; margin-bottom: .5rem;">
-      <div class="card-title" style="font-size:.9rem;"><i data-lucide="calendar-days"></i> Histórico de Consultas</div>
+      <div class="card-title" style="font-size:.9rem;"><span class="material-symbols-rounded">calendar_today</span> Histórico de Consultas</div>
     </div>
     <div class="table-responsive" style="max-height: 250px; overflow-y: auto;">
       <table>
