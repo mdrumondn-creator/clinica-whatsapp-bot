@@ -756,10 +756,10 @@
 
         <div id="conexao-connected-container" style="display:none;">
           <div style="font-size:4rem; margin-bottom:1rem;">✅</div>
-          <p style="color:var(--text-1); font-weight:600; font-size:1.1rem; margin-bottom:.5rem;">Aparelho conectado com sucesso!</p>
-          <p style="color:var(--text-3); font-size:.85rem; margin-bottom:2rem;">O bot está pronto para enviar e receber mensagens.</p>
+          <p style="color:var(--text-1); font-weight:600; font-size:1.1rem; margin-bottom:.5rem;">WhatsApp conectado com sucesso!</p>
+          <p style="color:var(--text-3); font-size:.85rem; margin-bottom:2rem;">O número da clínica está vinculado ao sistema.</p>
           
-          <button class="btn btn-danger btn-full" onclick="desconectarWhatsapp()">🔌 Desconectar Aparelho</button>
+          <button class="btn btn-danger btn-full" onclick="desconectarWhatsapp()">🔌 Desconectar WhatsApp</button>
         </div>
       </div>
     </div>
@@ -1338,6 +1338,8 @@ async function loadConexao() {
     if (!data || !data.status) {
       throw new Error("Resposta inválida do servidor");
     }
+    
+    if (data.instance) currentInstanceName = data.instance;
 
     if (data.status === 'conectado') {
       badge.className = 'badge green dot';
@@ -1372,10 +1374,11 @@ async function loadConexao() {
   }
 }
 
+let currentInstanceName = 'bot';
 async function desconectarWhatsapp() {
   if (!confirm('Tem certeza que deseja desconectar o WhatsApp da clínica? O bot parará de funcionar imediatamente.')) return;
   try {
-    await api('POST', '/api/admin/whatsapp/logout');
+    await api('POST', '/api/admin/whatsapp/logout?instance=' + currentInstanceName);
     toast('Desconectado com sucesso.', 'success');
     loadConexao();
   } catch(e) {
