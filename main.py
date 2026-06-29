@@ -1461,6 +1461,36 @@ def get_historico_paciente(id_paciente: int, req_user=Depends(verificar_token_jw
         db_pool.putconn(conn)
 
 # =========================================================
+# ENDPOINT: DADOS GRÁFICO (Chart.js)
+# =========================================================
+@app.get("/api/admin/stats/agenda-semana")
+def get_stats_agenda_semana():
+    conn = db_pool.getconn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                WITH recursive dates AS (
+                    SELECT CURRENT_DATE - INTERVAL '7 days' as dia
+                    UNION ALL
+                    SELECT dia + INTERVAL '1 day' FROM dates WHERE dia < CURRENT_DATE + INTERVAL '14 days'
+                )
+                SELECT 
+                    to_char(dates.dia, 'YYYY-MM-DD') as dia,
+                    count(c.id_consulta) as total
+                FROM dates
+                LEFT JOIN disponibilidade d ON to_char(d.data_hora_inicio, 'YYYY-MM-DD') = to_char(dates.dia, 'YYYY-MM-DD')
+                LEFT JOIN consulta c ON c.id_disponibilidade = d.id_disponibilidade AND c.status NOT IN ('CANCELADA', 'CANCELADA_CLINICA')
+                GROUP BY dates.dia
+                ORDER BY dates.dia ASC
+            """)
+            dados = cur.fetchall()
+        return {"dados": dados}
+    except Exception as e:
+        return {"dados": []}
+    finally:
+        db_pool.putconn(conn)
+
+# =========================================================
 # ENDPOINTS: EVOLUTION API (WHATSAPP CONNECTION)
 # =========================================================
 @app.get("/api/admin/whatsapp/status")
@@ -1473,7 +1503,7 @@ def whatsapp_status():
         instances = r.json()
         if not instances:
             payload = {"instanceName": "clinica", "qrcode": True, "integration": "WHATSAPP-BAILEYS"}
-            requests.post(f"{EVOLUTION_API_URL}/instance/create", json=payload, headers=headers)
+            requests.post(f"{EVOLUTION_API_URL}/instance/create", json=payload, headers=headers, timeout=5)
             return {"status": "desconectado", "instance": "clinica"}
             
         inst = instances[0]
