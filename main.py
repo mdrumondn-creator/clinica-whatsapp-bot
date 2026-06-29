@@ -521,14 +521,14 @@ def agendar(conn, telefone, id_disponibilidade):
 # =========================================================
 def processar_fluxo(conn, telefone, mensagem, etapa_atual, contexto, config):
     if etapa_atual == "inicio_agendamento":
-        return config.get('msg_saudacao', "Para prosseguir com seu atendimento, precisamos de alguns dados...\nVocê aceita os termos e concorda com o tratamento dos seus dados?"), "validar_lgpd", ["Concordo", "Não Concordo"]
+        return config.get('msg_saudacao', "Olá! Seja bem-vindo(a) ao atendimento virtual da nossa clínica! 🏥\n\nPara seguirmos com o seu agendamento, precisamos de alguns dados. Você concorda com os termos de tratamento dos seus dados (LGPD)?"), "validar_lgpd", ["Concordo", "Não Concordo"]
 
     if etapa_atual == "validar_lgpd":
         resp = str(mensagem).strip().lower()
         if resp in ["1", "concordo"]:
-            return config.get('msg_solicitar_cpf', "Obrigado por confirmar! Por favor, digite seu *CPF* (somente números) ou número da carteirinha:"), "pedir_cpf"
+            return config.get('msg_solicitar_cpf', "Excelente! 👍\nPor favor, digite apenas os números do seu *CPF* ou *carteirinha* do convênio:"), "pedir_cpf"
         elif resp in ["2", "não concordo", "nao concordo"]:
-            return config.get('msg_despedida_lgpd', "Entendemos perfeitamente. Como precisamos dos dados para agendamento, seu atendimento foi encerrado. A clínica agradece o contato e estamos de portas abertas! 👋"), "fim"
+            return config.get('msg_despedida_lgpd', "Compreendemos a sua escolha. Como precisamos dos dados para o agendamento, o atendimento foi encerrado.\n\nSempre que precisar, estaremos à disposição! 👋"), "fim"
         else:
             return "Por favor, responda com Concordo ou Não Concordo.", "validar_lgpd"
 
@@ -546,7 +546,7 @@ def processar_fluxo(conn, telefone, mensagem, etapa_atual, contexto, config):
 
         if not p:
             contexto["cpf_temp"] = digits
-            return config.get('msg_solicitar_nome', "Vi que é seu primeiro acesso conosco! Para finalizar o seu cadastro, por favor, digite o seu *Nome Completo*:"), "pedir_nome"
+            return config.get('msg_solicitar_nome', "Vi que é seu primeiro acesso por aqui! 🎉\nPara completarmos o seu cadastro, digite o seu *Nome Completo*, por favor:"), "pedir_nome"
 
         id_paciente = p[0]
         with conn.cursor() as cur:
@@ -564,7 +564,7 @@ def processar_fluxo(conn, telefone, mensagem, etapa_atual, contexto, config):
             cur.execute("SELECT nome FROM paciente WHERE id_paciente = %s", (id_paciente,))
             nome_paciente = cur.fetchone()[0].split()[0]
             
-        return f"Bem-vindo(a) de volta, {nome_paciente}! " + resposta_inicio, "inicio", botoes_inicio
+        return f"É muito bom ter você de volta, {nome_paciente}! ✨\n\n" + resposta_inicio, "inicio", botoes_inicio
 
     if etapa_atual == "pedir_nome":
         nome = (mensagem or '').strip()
@@ -593,7 +593,7 @@ def processar_fluxo(conn, telefone, mensagem, etapa_atual, contexto, config):
 
     if etapa_atual == "inicio":
         return (
-            "Como posso te ajudar hoje?"
+            "Como podemos ajudar você hoje? Escolha uma das opções:"
         ), "menu", ["Agendar consulta", "Falar com recepção"]
 
     if etapa_atual == "menu":
