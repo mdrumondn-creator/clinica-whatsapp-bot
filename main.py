@@ -1501,9 +1501,14 @@ def whatsapp_status():
         if r.status_code != 200:
             return {"status": "erro", "message": "Falha na API Evolution"}
         instances = r.json()
+        if type(instances) is dict and "error" in instances:
+            return {"status": "erro", "message": str(instances)}
+
         if not instances:
             payload = {"instanceName": "clinica", "qrcode": True, "integration": "WHATSAPP-BAILEYS"}
-            requests.post(f"{EVOLUTION_API_URL}/instance/create", json=payload, headers=headers, timeout=5)
+            res = requests.post(f"{EVOLUTION_API_URL}/instance/create", json=payload, headers=headers, timeout=10)
+            if res.status_code not in (200, 201):
+                return {"status": "erro", "message": f"Erro ao criar instância: {res.text}"}
             return {"status": "desconectado", "instance": "clinica"}
             
         inst = instances[0]
@@ -1522,7 +1527,7 @@ def whatsapp_qrcode(instance: str = "clinica"):
         r = requests.get(f"{EVOLUTION_API_URL}/instance/connect/{instance}", headers=headers, timeout=5)
         if r.status_code == 200:
             return r.json()
-        return {"error": "Falha ao gerar QR Code"}
+        return {"error": f"Falha ao gerar QR Code: {r.status_code} - {r.text}"}
     except Exception as e:
         return {"error": str(e)}
 
