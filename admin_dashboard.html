@@ -4,7 +4,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Clínica Bot — Painel Administrativo</title>
-  <meta name="description" content="Painel de controle para gestão do chatbot, agenda médica e configurações da clínica." />
+  <meta name="description" content="Painel administrativo do bot de agendamento da clínica" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
   <style>
@@ -646,7 +647,17 @@
           <div class="stat-label">Horários Livres</div>
           <div class="stat-value" id="stat-livres">—</div>
           <div class="stat-sub">disponíveis hoje</div>
+        </div>      <!-- Gráfico de Atendimentos -->
+      <div class="card" style="margin-top:1.25rem;">
+        <div class="card-header">
+          <div class="card-title">📈 Atendimentos por Dia <span style="font-size:.75rem;color:var(--text-3);font-weight:400;">(últimos 7 + próximos 14 dias)</span></div>
+          <button class="btn btn-ghost" style="font-size:.75rem;padding:.35rem .7rem;" onclick="loadChart()">🔄</button>
         </div>
+        <div style="position:relative;height:220px;">
+          <canvas id="chart-agenda"></canvas>
+        </div>
+      </div>
+
         <div class="stat-card yellow" data-icon="💬" style="cursor:pointer;" onclick="showPage('mensagens')">
           <div class="stat-label">Mensagens Hoje</div>
           <div class="stat-value" id="stat-msgs">—</div>
@@ -990,6 +1001,7 @@
           <table>
             <thead>
               <tr>
+                <th>Foto</th>
                 <th>Nome</th>
                 <th>Especialidade</th>
                 <th>CRM</th>
@@ -998,6 +1010,7 @@
               </tr>
             </thead>
             <tbody id="tbody-medicos">
+
               <tr class="loading-row"><td colspan="5"><div class="spinner"></div></td></tr>
             </tbody>
           </table>
@@ -1199,8 +1212,57 @@ async function loadDashboard() {
 
     // Atualiza pill de status do bot
     await updateBotPill();
+
+    // Carrega o gráfico
+    setTimeout(() => { loadChart(); }, 100);
   } catch (e) {
     console.error('Erro no dashboard:', e);
+  }
+}
+
+// ===================== GRÁFICO (Chart.js) =====================
+let _chartAgenda = null;
+async function loadChart() {
+  try {
+    const data = await api('GET', '/api/admin/stats/agenda-semana');
+    const labels = data.dados.map(d => {
+      const [y, m, day] = d.dia.split('-');
+      return `${day}/${m}`;
+    });
+    const vals = data.dados.map(d => d.total);
+    
+    const ctx = document.getElementById('chart-agenda');
+    if (!ctx) return;
+
+    if (_chartAgenda) {
+      _chartAgenda.destroy();
+    }
+
+    _chartAgenda = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Consultas Agendadas',
+          data: vals,
+          backgroundColor: 'rgba(14, 165, 233, 0.7)',
+          borderColor: 'rgba(14, 165, 233, 1)',
+          borderWidth: 1,
+          borderRadius: 4
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { beginAtZero: true, ticks: { stepSize: 1, color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+          x: { ticks: { color: '#94a3b8' }, grid: { display: false } }
+        }
+      }
+    });
+  } catch(e) {
+    console.error('Erro ao carregar gráfico:', e);
   }
 }
 
@@ -1295,6 +1357,15 @@ async function loadMedicos() {
     } else {
       tbody.innerHTML = data.medicos.map(m => `
         <tr>
+          <td>
+            <div style="display:flex;align-items:center;gap:.5rem;">
+              <div style="width:40px;height:40px;border-radius:50%;background:var(--bg-base);overflow:hidden;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;">
+                ${m.foto_base64 ? `<img src="${m.foto_base64}" style="width:100%;height:100%;object-fit:cover;" />` : `<span style="font-size:1.2rem;">👨‍⚕️</span>`}
+              </div>
+              <button class="btn btn-ghost" style="padding:.2rem .4rem;font-size:.7rem;" onclick="document.getElementById('file-foto-${m.id_medico}').click()">📷 Alterar</button>
+              <input type="file" id="file-foto-${m.id_medico}" accept="image/jpeg,image/png" style="display:none;" onchange="uploadFotoMedico(${m.id_medico}, this)" />
+            </div>
+          </td>
           <td><strong>${m.nome}</strong></td>
           <td>${m.especialidade || '—'}</td>
           <td>${m.crm}/${m.uf_crm}</td>
@@ -1342,6 +1413,30 @@ async function cadastrarMedico() {
   } catch (e) {
     al.className = 'alert error'; al.textContent = '❌ ' + e.message;
   }
+}
+
+async function uploadFotoMedico(id_medico, inputElem) {
+  const file = inputElem.files[0];
+  if (!file) return;
+
+  if (file.size > 500 * 1024) {
+    toast('Imagem muito grande. Limite de 500KB.', 'error');
+    inputElem.value = '';
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = async function(e) {
+    const base64Str = e.target.result;
+    try {
+      await api('PUT', `/api/admin/medicos/${id_medico}/foto`, { foto_base64: base64Str });
+      toast('Foto do médico atualizada com sucesso!', 'success');
+      loadMedicos();
+    } catch(err) {
+      toast('Erro ao atualizar foto: ' + err.message, 'error');
+    }
+  };
+  reader.readAsDataURL(file);
 }
 
 // ===================== AGENDA =====================

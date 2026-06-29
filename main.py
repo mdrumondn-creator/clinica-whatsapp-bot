@@ -1012,7 +1012,8 @@ def listar_medicos(user=Depends(admin_auth)):
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute("""
                 SELECT id_medico, nome, especialidade, crm, uf_crm,
-                       telefone, email, tempo_padrao_minutos, ativo
+                       telefone, email, tempo_padrao_minutos, ativo,
+                       foto_base64
                 FROM medico
                 ORDER BY nome
             """)
@@ -1060,6 +1061,63 @@ def cadastrar_medico(req: NovoMedico, user=Depends(admin_auth)):
         except:
             pass
         db_pool.putconn(conn)
+
+
+# =========================================================
+# ENDPOINT: UPLOAD DE FOTO DO MÉDICO
+# =========================================================
+class FotoMedico(BaseModel):
+    foto_base64: str  # "data:image/jpeg;base64,..."
+
+@app.put("/api/admin/medicos/{id_medico}/foto")
+def upload_foto_medico(id_medico: int, req: FotoMedico, user=Depends(admin_auth)):
+    conn = db_pool.getconn()
+    try:
+        # Valida tamanho (~500KB max em base64 ≈ 360KB de imagem)
+        if len(req.foto_base64) > 700_000:
+            raise HTTPException(status_code=413, detail="Imagem muito grande. Máximo: 500KB")
+        with conn.cursor() as cur:
+            cur.execute("""
+                UPDATE medico SET foto_base64 = %s WHERE id_medico = %s
+            """, (req.foto_base64, id_medico))
+            conn.commit()
+        return {"status": "ok"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db_pool.putconn(conn)
+
+
+# =========================================================
+# ENDPOINT: STATS — AGENDAMENTOS POR DIA (últimos 7 + próx 7)
+# =========================================================
+@app.get("/api/admin/stats/agenda-semana")
+def stats_agenda_semana(user=Depends(admin_auth)):
+    conn = db_pool.getconn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT
+                    DATE(d.inicio_datetime) AS dia,
+                    COUNT(c.id_consulta)    AS total
+                FROM disponibilidade d
+                LEFT JOIN consulta c
+                    ON c.id_disponibilidade = d.id_disponibilidade
+                    AND c.status NOT IN ('CANCELADA','CANCELADA_CLINICA','FALTOU')
+                WHERE d.inicio_datetime BETWEEN CURRENT_DATE - INTERVAL '7 days'
+                                            AND CURRENT_DATE + INTERVAL '14 days'
+                GROUP BY DATE(d.inicio_datetime)
+                ORDER BY dia
+            """)
+            rows = cur.fetchall()
+        result = [{"dia": str(r["dia"]), "total": r["total"]} for r in rows]
+        return {"dados": result}
+    finally:
+        db_pool.putconn(conn)
+
 
 
 # =========================================================
