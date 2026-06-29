@@ -12,27 +12,29 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg-base:    #0d1117;
-      --bg-card:    #161b22;
-      --bg-input:   #0d1117;
-      --bg-hover:   #1c2230;
-      --border:     #30363d;
-      --accent:     #2ea04390;
-      --accent-s:   #2ea043;
-      --accent-g:   #3fb950;
-      --danger:     #da3633;
-      --danger-s:   #f85149;
-      --warning:    #d29922;
-      --warning-s:  #e3b341;
-      --info:       #1f6feb;
-      --info-s:     #58a6ff;
-      --text-1:     #e6edf3;
-      --text-2:     #8b949e;
-      --text-3:     #6e7681;
-      --radius:     10px;
-      --radius-lg:  16px;
-      --shadow:     0 4px 24px rgba(0,0,0,.45);
+      --bg-base:    #07090f;
+      --bg-card:    #0e1320;
+      --bg-input:   #07090f;
+      --bg-hover:   #131929;
+      --border:     #1e2a3a;
+      --accent:     #0ea5e990;
+      --accent-s:   #0ea5e9;
+      --accent-g:   #38bdf8;
+      --danger:     #dc2626;
+      --danger-s:   #f87171;
+      --warning:    #d97706;
+      --warning-s:  #fbbf24;
+      --info:       #6366f1;
+      --info-s:     #a5b4fc;
+      --text-1:     #f1f5f9;
+      --text-2:     #94a3b8;
+      --text-3:     #64748b;
+      --radius:     12px;
+      --radius-lg:  18px;
+      --shadow:     0 8px 32px rgba(0,0,0,.6);
       --transition: .18s cubic-bezier(.4,0,.2,1);
+      --grad-primary: linear-gradient(135deg, #0ea5e9, #6366f1);
+      --grad-card: linear-gradient(160deg, #0e1320 0%, #0a1020 100%);
     }
 
     html { font-size: 15px; }
@@ -53,42 +55,61 @@
     #login-screen {
       position: fixed; inset: 0;
       display: flex; align-items: center; justify-content: center;
-      background: var(--bg-base);
+      background: radial-gradient(ellipse at 60% 40%, #0c1a2e 0%, #07090f 70%);
       z-index: 999;
       transition: opacity .4s ease, transform .4s ease;
+    }
+    #login-screen::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%230ea5e9' fill-opacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E") repeat;
+      pointer-events: none;
     }
     #login-screen.hide {
       opacity: 0; pointer-events: none; transform: translateY(-12px);
     }
 
     .login-card {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
+      background: linear-gradient(160deg, #0e1929 0%, #0a1020 100%);
+      border: 1px solid rgba(14,165,233,.2);
       border-radius: var(--radius-lg);
-      padding: 2.5rem 2rem;
-      width: 100%; max-width: 380px;
-      box-shadow: var(--shadow);
-      animation: fadeIn .4s ease;
+      padding: 2.8rem 2.2rem;
+      width: 100%; max-width: 400px;
+      box-shadow: 0 0 0 1px rgba(14,165,233,.05), 0 24px 64px rgba(0,0,0,.7);
+      animation: fadeIn .5s ease;
+      position: relative;
+    }
+    .login-card::before {
+      content: '';
+      position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+      width: 60%; height: 2px;
+      background: var(--grad-primary);
+      border-radius: 0 0 8px 8px;
     }
 
     .login-logo {
       text-align: center;
-      margin-bottom: 1.5rem;
+      margin-bottom: 2rem;
     }
-    .login-logo .icon {
-      font-size: 2.6rem;
-      display: block;
-      margin-bottom: .4rem;
+    .login-logo .icon-wrap {
+      width: 72px; height: 72px;
+      margin: 0 auto .75rem;
+      border-radius: 20px;
+      background: var(--grad-primary);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 2rem;
+      box-shadow: 0 8px 24px rgba(14,165,233,.3);
     }
     .login-logo h1 {
-      font-size: 1.25rem;
+      font-size: 1.4rem;
       font-weight: 700;
       color: var(--text-1);
+      letter-spacing: -.02em;
     }
     .login-logo p {
       font-size: .8rem;
-      color: var(--text-2);
-      margin-top: .2rem;
+      color: var(--text-3);
+      margin-top: .25rem;
     }
 
     /* ===================== FORM ELEMENTS ===================== */
@@ -128,29 +149,30 @@
     /* ===================== BUTTONS ===================== */
     .btn {
       display: inline-flex; align-items: center; gap: .5rem;
-      padding: .55rem 1.1rem;
+      padding: .55rem 1.2rem;
       border: none; border-radius: var(--radius);
-      font-family: inherit; font-size: .88rem; font-weight: 600;
+      font-family: inherit; font-size: .875rem; font-weight: 600;
       cursor: pointer; transition: all var(--transition);
       text-decoration: none; white-space: nowrap;
     }
     .btn-primary {
-      background: var(--accent-s); color: #fff;
+      background: var(--grad-primary); color: #fff;
+      box-shadow: 0 4px 14px rgba(14,165,233,.25);
     }
-    .btn-primary:hover { background: var(--accent-g); transform: translateY(-1px); box-shadow: 0 4px 14px rgba(46,160,67,.35); }
+    .btn-primary:hover { filter: brightness(1.15); transform: translateY(-1px); box-shadow: 0 6px 20px rgba(14,165,233,.35); }
     .btn-danger {
       background: var(--danger); color: #fff;
     }
-    .btn-danger:hover { background: var(--danger-s); }
+    .btn-danger:hover { background: var(--danger-s); transform: translateY(-1px); }
     .btn-ghost {
       background: transparent; color: var(--text-2);
       border: 1px solid var(--border);
     }
-    .btn-ghost:hover { background: var(--bg-hover); color: var(--text-1); }
+    .btn-ghost:hover { background: var(--bg-hover); color: var(--text-1); border-color: var(--accent-s); }
     .btn-info {
       background: var(--info); color: #fff;
     }
-    .btn-info:hover { background: var(--info-s); }
+    .btn-info:hover { filter: brightness(1.15); }
     .btn-full { width: 100%; justify-content: center; }
 
     /* ===================== LAYOUT ===================== */
@@ -162,45 +184,62 @@
 
     /* Sidebar */
     .sidebar {
-      width: 220px; flex-shrink: 0;
-      background: var(--bg-card);
+      width: 240px; flex-shrink: 0;
+      background: linear-gradient(180deg, #0a1020 0%, #07090f 100%);
       border-right: 1px solid var(--border);
       display: flex; flex-direction: column;
       position: fixed; top: 0; left: 0; bottom: 0;
       z-index: 100;
     }
     .sidebar-header {
-      padding: 1.2rem 1rem;
+      padding: 1.4rem 1.2rem;
       border-bottom: 1px solid var(--border);
+      background: linear-gradient(135deg, rgba(14,165,233,.08), rgba(99,102,241,.08));
     }
     .sidebar-header h2 {
-      font-size: .95rem; font-weight: 700;
+      font-size: 1rem; font-weight: 800;
       color: var(--text-1);
-      display: flex; align-items: center; gap: .5rem;
+      display: flex; align-items: center; gap: .6rem;
+      letter-spacing: -.02em;
+    }
+    .sidebar-header h2 .logo-dot {
+      width: 28px; height: 28px;
+      border-radius: 8px;
+      background: var(--grad-primary);
+      display: flex; align-items: center; justify-content: center;
+      font-size: .9rem;
+      flex-shrink: 0;
     }
     .sidebar-header p {
       font-size: .7rem; color: var(--text-3);
-      margin-top: .15rem;
+      margin-top: .2rem; padding-left: 34px;
     }
 
-    .sidebar-nav { flex: 1; padding: .75rem 0; overflow-y: auto; }
+    .sidebar-nav { flex: 1; padding: .6rem .6rem; overflow-y: auto; }
+    .nav-section-label {
+      font-size: .65rem; font-weight: 700; letter-spacing: .1em;
+      color: var(--text-3); text-transform: uppercase;
+      padding: .8rem .6rem .3rem;
+    }
     .nav-item {
-      display: flex; align-items: center; gap: .7rem;
-      padding: .6rem 1rem;
+      display: flex; align-items: center; gap: .65rem;
+      padding: .6rem .8rem;
       color: var(--text-2);
       cursor: pointer;
-      font-size: .875rem;
+      font-size: .85rem;
       font-weight: 500;
       transition: all var(--transition);
-      border-left: 3px solid transparent;
+      border-radius: var(--radius);
       user-select: none;
+      margin-bottom: 2px;
     }
     .nav-item:hover { color: var(--text-1); background: var(--bg-hover); }
     .nav-item.active {
-      color: var(--accent-g); background: rgba(46,160,67,.12);
-      border-left-color: var(--accent-g);
+      color: #fff;
+      background: linear-gradient(135deg, rgba(14,165,233,.25), rgba(99,102,241,.25));
+      box-shadow: inset 0 0 0 1px rgba(14,165,233,.2);
     }
-    .nav-item .icon { font-size: 1.1rem; }
+    .nav-item .icon { font-size: 1rem; width: 20px; text-align: center; }
 
     .sidebar-footer {
       padding: .75rem 1rem;
@@ -222,21 +261,26 @@
 
     /* Main content */
     .main {
-      margin-left: 220px;
+      margin-left: 240px;
       flex: 1;
       display: flex; flex-direction: column;
       min-height: 100vh;
     }
 
     .topbar {
-      background: var(--bg-card);
+      background: rgba(7,9,15,.85);
+      backdrop-filter: blur(12px);
       border-bottom: 1px solid var(--border);
-      padding: .9rem 1.5rem;
+      padding: .9rem 1.75rem;
       display: flex; align-items: center; justify-content: space-between;
       position: sticky; top: 0; z-index: 50;
     }
     .topbar h1 {
       font-size: 1.1rem; font-weight: 700;
+      background: var(--grad-primary);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
     }
     .topbar-actions { display: flex; align-items: center; gap: .75rem; }
 
@@ -264,30 +308,36 @@
     /* ===================== STATS GRID ===================== */
     .stats-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 1rem;
-      margin-bottom: 1.5rem;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1.1rem;
+      margin-bottom: 1.75rem;
     }
     .stat-card {
       background: var(--bg-card);
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
-      padding: 1.1rem 1.25rem;
+      padding: 1.3rem 1.5rem;
       position: relative; overflow: hidden;
-      transition: transform var(--transition);
+      transition: transform var(--transition), box-shadow var(--transition);
     }
-    .stat-card:hover { transform: translateY(-2px); }
+    .stat-card:hover { transform: translateY(-3px); box-shadow: 0 12px 32px rgba(0,0,0,.4); }
     .stat-card::before {
       content: '';
-      position: absolute; top: 0; left: 0; right: 0; height: 3px;
+      position: absolute; top: 0; left: 0; right: 0; height: 2px;
     }
-    .stat-card.green::before { background: var(--accent-g); }
-    .stat-card.blue::before { background: var(--info-s); }
-    .stat-card.yellow::before { background: var(--warning-s); }
-    .stat-card.red::before { background: var(--danger-s); }
+    .stat-card::after {
+      content: attr(data-icon);
+      position: absolute; bottom: .75rem; right: 1rem;
+      font-size: 2.5rem; opacity: .08;
+      line-height: 1;
+    }
+    .stat-card.green::before { background: linear-gradient(90deg, #0ea5e9, #38bdf8); }
+    .stat-card.blue::before { background: linear-gradient(90deg, #6366f1, #a5b4fc); }
+    .stat-card.yellow::before { background: linear-gradient(90deg, #d97706, #fbbf24); }
+    .stat-card.red::before { background: linear-gradient(90deg, #dc2626, #f87171); }
 
-    .stat-label { font-size: .75rem; color: var(--text-2); font-weight: 500; text-transform: uppercase; letter-spacing: .05em; }
-    .stat-value { font-size: 1.9rem; font-weight: 700; margin: .25rem 0; }
+    .stat-label { font-size: .72rem; color: var(--text-3); font-weight: 600; text-transform: uppercase; letter-spacing: .08em; }
+    .stat-value { font-size: 2.2rem; font-weight: 800; margin: .3rem 0; letter-spacing: -.03em; }
     .stat-sub { font-size: .75rem; color: var(--text-3); }
 
     /* ===================== TOGGLE SWITCH ===================== */
@@ -494,9 +544,9 @@
 <div id="login-screen">
   <div class="login-card animate-in">
     <div class="login-logo">
-      <span class="icon">🏥</span>
-      <h1>Clínica Bot Admin</h1>
-      <p>Painel de controle administrativo</p>
+      <div class="icon-wrap">🏥</div>
+      <h1>Clínica Bot</h1>
+      <p>Painel Administrativo</p>
     </div>
     <div id="login-alert" class="alert error hidden">❌ Credenciais inválidas. Tente novamente.</div>
     <div class="form-group">
@@ -519,28 +569,31 @@
   <!-- Sidebar -->
   <aside class="sidebar">
     <div class="sidebar-header">
-      <h2><span>🏥</span> Clínica Bot</h2>
+      <h2><span class="logo-dot">🏥</span> Clínica Bot</h2>
       <p>Painel Administrativo</p>
     </div>
     <nav class="sidebar-nav">
+      <div class="nav-section-label">Principal</div>
       <div class="nav-item active" id="nav-dashboard" onclick="showPage('dashboard')">
         <span class="icon">📊</span> Dashboard
-      </div>
-      <div class="nav-item" id="nav-config" onclick="showPage('config')">
-        <span class="icon">⚙️</span> Controle do Bot
-      </div>
-      <div class="nav-item" id="nav-agenda" onclick="showPage('agenda')">
-        <span class="icon">📅</span> Agenda
       </div>
       <div class="nav-item" id="nav-consultas" onclick="showPage('consultas')">
         <span class="icon">📋</span> Consultas
       </div>
-      <div class="nav-item" id="nav-medicos" onclick="showPage('medicos')">
-        <span class="icon">👨‍⚕️</span> Médicos
-      </div>
       <div class="nav-item" id="nav-mensagens" onclick="showPage('mensagens')">
         <span class="icon">💬</span> Mensagens
         <span class="badge red" id="badge-msgs" style="margin-left:auto;display:none;">0</span>
+      </div>
+      <div class="nav-section-label">Gestão</div>
+      <div class="nav-item" id="nav-agenda" onclick="showPage('agenda')">
+        <span class="icon">📅</span> Agenda
+      </div>
+      <div class="nav-item" id="nav-medicos" onclick="showPage('medicos')">
+        <span class="icon">👨‍⚕️</span> Médicos
+      </div>
+      <div class="nav-section-label">Sistema</div>
+      <div class="nav-item" id="nav-config" onclick="showPage('config')">
+        <span class="icon">⚙️</span> Controle do Bot
       </div>
     </nav>
     <div class="sidebar-footer">
@@ -572,22 +625,22 @@
     <!-- PAGE: DASHBOARD -->
     <div class="page active animate-in" id="page-dashboard">
       <div class="stats-grid" id="stats-grid">
-        <div class="stat-card green" style="cursor: pointer;" onclick="showPage('consultas')">
+        <div class="stat-card green" data-icon="📋" style="cursor:pointer;" onclick="showPage('consultas')">
           <div class="stat-label">Consultas Hoje</div>
           <div class="stat-value" id="stat-consultas">—</div>
           <div class="stat-sub">agendadas/confirmadas</div>
         </div>
-        <div class="stat-card blue" style="cursor: pointer;" onclick="showPage('agenda')">
+        <div class="stat-card blue" data-icon="📅" style="cursor:pointer;" onclick="showPage('agenda')">
           <div class="stat-label">Horários Livres</div>
           <div class="stat-value" id="stat-livres">—</div>
           <div class="stat-sub">disponíveis hoje</div>
         </div>
-        <div class="stat-card yellow" style="cursor: pointer;" onclick="showPage('mensagens')">
+        <div class="stat-card yellow" data-icon="💬" style="cursor:pointer;" onclick="showPage('mensagens')">
           <div class="stat-label">Mensagens Hoje</div>
           <div class="stat-value" id="stat-msgs">—</div>
           <div class="stat-sub">recebidas pelo bot</div>
         </div>
-        <div class="stat-card red" style="cursor: pointer;" onclick="showPage('medicos')">
+        <div class="stat-card red" data-icon="👨‍⚕️" style="cursor:pointer;" onclick="showPage('medicos')">
           <div class="stat-label">Médicos Ativos</div>
           <div class="stat-value" id="stat-medicos">—</div>
           <div class="stat-sub">cadastrados</div>
@@ -1376,10 +1429,28 @@ async function loadMensagens() {
 }
 
 // ===================== AUTO-REFRESH =====================
-// Atualiza o status do bot a cada 60 segundos automaticamente
 setInterval(() => {
   if (authToken) updateBotPill();
 }, 60000);
+
+// ===================== DEV MODE: AUTO-LOGIN =====================
+// TODO: remover antes de ir para produção
+(async function devAutoLogin() {
+  try {
+    const data = await api('POST', '/api/admin/login', { login: 'admin', senha: 'admin123' });
+    authToken = data.token;
+    currentUser = data.usuario;
+    document.getElementById('user-name').textContent = currentUser.nome;
+    document.getElementById('user-role').textContent = currentUser.perfil;
+    document.getElementById('user-avatar').textContent = currentUser.nome.charAt(0).toUpperCase();
+    document.getElementById('login-screen').classList.add('hide');
+    document.getElementById('app').classList.add('show');
+    await Promise.all([loadDashboard(), loadConfig(), loadMedicos(), loadAgenda(), loadConsultas(), loadMensagens()]);
+  } catch(e) {
+    // Se falhar, exibe a tela de login normalmente
+    console.warn('Auto-login falhou, exibindo tela de login.', e);
+  }
+})();
 </script>
 
 <!-- MODAL PACIENTE -->
