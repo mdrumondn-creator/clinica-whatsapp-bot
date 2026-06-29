@@ -34,8 +34,22 @@
       --radius-lg:  18px;
       --shadow:     0 8px 32px rgba(0,0,0,.6);
       --transition: .18s cubic-bezier(.4,0,.2,1);
-      --grad-primary: linear-gradient(135deg, #0ea5e9, #6366f1);
+      --transition: .18s cubic-bezier(.4,0,.2,1);
+      --grad-primary: linear-gradient(135deg, var(--accent-s), var(--info));
       --grad-card: linear-gradient(160deg, #0e1320 0%, #0a1020 100%);
+    }
+
+    [data-theme="light"] {
+      --bg-base:    #f8fafc;
+      --bg-card:    #ffffff;
+      --bg-input:   #f1f5f9;
+      --bg-hover:   #f1f5f9;
+      --border:     #e2e8f0;
+      --text-1:     #0f172a;
+      --text-2:     #334155;
+      --text-3:     #64748b;
+      --shadow:     0 6px 20px rgba(0,0,0,.06);
+      --grad-card:  linear-gradient(160deg, #ffffff 0%, #f8fafc 100%);
     }
 
     html { font-size: 15px; }
@@ -631,6 +645,7 @@
         <div id="bot-pill" class="bot-status-pill away">
           <span class="pulse"></span> Verificando...
         </div>
+        <button class="btn btn-ghost" onclick="toggleTheme()" title="Alternar Modo Claro/Escuro">🌓</button>
         <button class="btn btn-ghost" onclick="refreshCurrentPage()" title="Atualizar">🔄</button>
       </div>
     </div>
@@ -764,6 +779,31 @@
           <label for="inp-msg-fora">Fora do Horário (Use {inicio} e {fim} para exibir as horas)</label>
           <textarea id="inp-msg-fora" rows="3" placeholder="Nosso atendimento é das {inicio} às {fim}..."></textarea>
         </div>
+
+        <!-- NOVA SEÇÃO: APARÊNCIA DO PAINEL -->
+        <div style="margin: 1.25rem 0 .75rem; border-top: 1px solid var(--border); padding-top: 1.25rem;">
+          <div class="card-title" style="margin-bottom: 1rem;">🎨 Aparência do Painel</div>
+          <div class="grid-2">
+            <div class="form-group">
+              <label>Cor Principal (Identidade Visual da Clínica)</label>
+              <div style="display:flex;gap:1rem;margin-top:.5rem;">
+                <div class="color-picker-dot" style="background:#0ea5e9;" onclick="setAccentColor('blue')"></div>
+                <div class="color-picker-dot" style="background:#10b981;" onclick="setAccentColor('green')"></div>
+                <div class="color-picker-dot" style="background:#8b5cf6;" onclick="setAccentColor('purple')"></div>
+                <div class="color-picker-dot" style="background:#f43f5e;" onclick="setAccentColor('rose')"></div>
+                <div class="color-picker-dot" style="background:#f59e0b;" onclick="setAccentColor('amber')"></div>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Modo de Exibição</label>
+              <button class="btn btn-ghost" style="border:1px solid var(--border);" onclick="toggleTheme()">🌓 Alternar Claro/Escuro</button>
+            </div>
+          </div>
+        </div>
+        <style>
+          .color-picker-dot { width:32px; height:32px; border-radius:50%; cursor:pointer; box-shadow:0 0 0 2px transparent; transition:transform 0.2s; border: 2px solid var(--bg-card); }
+          .color-picker-dot:hover { transform: scale(1.1); }
+        </style>
 
         <div style="margin: 1.25rem 0 .75rem; border-top: 1px solid var(--border); padding-top: 1.25rem;">
           <div class="card-title" style="margin-bottom: 1rem;">🔔 Mensagens de Lembrete Automático</div>
@@ -1040,6 +1080,42 @@
 <div id="toast"></div>
 
 <script>
+// ===================== THEME MANAGER =====================
+const THEMES = {
+  blue:   { a:'#0ea5e990', s:'#0ea5e9', g:'#38bdf8', i:'#6366f1' },
+  green:  { a:'#10b98190', s:'#10b981', g:'#34d399', i:'#059669' },
+  purple: { a:'#8b5cf690', s:'#8b5cf6', g:'#a78bfa', i:'#d946ef' },
+  rose:   { a:'#f43f5e90', s:'#f43f5e', g:'#fb7185', i:'#e11d48' },
+  amber:  { a:'#f59e0b90', s:'#f59e0b', g:'#fbbf24', i:'#ea580c' }
+};
+
+function toggleTheme() {
+  const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+  const next = isLight ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-theme', next);
+  localStorage.setItem('clinica_theme', next);
+  if(_chartAgenda) loadChart(); // Redesenha p/ trocar cor da fonte
+}
+
+function setAccentColor(colorName) {
+  const c = THEMES[colorName];
+  if (!c) return;
+  document.documentElement.style.setProperty('--accent', c.a);
+  document.documentElement.style.setProperty('--accent-s', c.s);
+  document.documentElement.style.setProperty('--accent-g', c.g);
+  document.documentElement.style.setProperty('--info', c.i);
+  localStorage.setItem('clinica_color', colorName);
+  if(_chartAgenda) loadChart();
+}
+
+// Init theme on load
+(function initTheme(){
+  const savedTheme = localStorage.getItem('clinica_theme');
+  if (savedTheme) document.documentElement.setAttribute('data-theme', savedTheme);
+  const savedColor = localStorage.getItem('clinica_color');
+  if (savedColor) setAccentColor(savedColor);
+})();
+
 // ===================== CONFIG =====================
 const API_BASE = '';
 let authToken = null;
@@ -1256,10 +1332,11 @@ async function loadChart() {
         maintainAspectRatio: false,
         plugins: { legend: { display: false } },
         scales: {
-          y: { beginAtZero: true, ticks: { stepSize: 1, color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } },
-          x: { ticks: { color: '#94a3b8' }, grid: { display: false } }
+          y: { beginAtZero: true, ticks: { stepSize: 1, color: 'var(--text-3)' }, grid: { color: 'rgba(128,128,128,0.15)' } },
+          x: { ticks: { color: 'var(--text-3)' }, grid: { display: false } }
         }
       }
+
     });
   } catch(e) {
     console.error('Erro ao carregar gráfico:', e);
