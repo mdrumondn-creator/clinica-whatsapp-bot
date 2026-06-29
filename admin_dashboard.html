@@ -358,11 +358,14 @@
       content: '';
       position: absolute; top: 0; left: 0; right: 0; height: 2px;
     }
-    .stat-card::after {
-      content: attr(data-icon);
+    .stat-icon-watermark {
       position: absolute; bottom: .75rem; right: 1rem;
-      font-size: 2.5rem; opacity: .15;
+      opacity: .15;
       line-height: 1;
+      color: currentColor;
+    }
+    .stat-icon-watermark svg {
+      width: 2.5rem; height: 2.5rem;
     }
     .stat-card.green::before { background: linear-gradient(90deg, #0ea5e9, #38bdf8); }
     .stat-card.blue::before { background: linear-gradient(90deg, #6366f1, #a5b4fc); }
@@ -675,22 +678,26 @@
     <!-- PAGE: DASHBOARD -->
     <div class="page active animate-in" id="page-dashboard">
       <div class="stats-grid" id="stats-grid">
-        <div class="stat-card green" data-icon="<i data-lucide="clipboard-list"></i>" style="cursor:pointer;" onclick="showPage('consultas')">
+        <div class="stat-card green" style="cursor:pointer;" onclick="showPage('consultas')">
+          <div class="stat-icon-watermark"><i data-lucide="clipboard-list"></i></div>
           <div class="stat-label">Consultas Hoje</div>
           <div class="stat-value" id="stat-consultas">—</div>
           <div class="stat-sub">agendadas/confirmadas</div>
         </div>
-        <div class="stat-card blue" data-icon="<i data-lucide="calendar"></i>" style="cursor:pointer;" onclick="showPage('agenda')">
+        <div class="stat-card blue" style="cursor:pointer;" onclick="showPage('agenda')">
+          <div class="stat-icon-watermark"><i data-lucide="calendar"></i></div>
           <div class="stat-label">Horários Livres</div>
           <div class="stat-value" id="stat-livres">—</div>
           <div class="stat-sub">disponíveis hoje</div>
         </div>
-        <div class="stat-card yellow" data-icon="<i data-lucide="message-circle"></i>" style="cursor:pointer;" onclick="showPage('mensagens')">
+        <div class="stat-card yellow" style="cursor:pointer;" onclick="showPage('mensagens')">
+          <div class="stat-icon-watermark"><i data-lucide="message-circle"></i></div>
           <div class="stat-label">Mensagens Hoje</div>
           <div class="stat-value" id="stat-msgs">—</div>
           <div class="stat-sub">recebidas pelo bot</div>
         </div>
-        <div class="stat-card red" data-icon="<i data-lucide="stethoscope"></i>" style="cursor:pointer;" onclick="showPage('medicos')">
+        <div class="stat-card red" style="cursor:pointer;" onclick="showPage('medicos')">
+          <div class="stat-icon-watermark"><i data-lucide="stethoscope"></i></div>
           <div class="stat-label">Médicos Ativos</div>
           <div class="stat-value" id="stat-medicos">—</div>
           <div class="stat-sub">cadastrados</div>
