@@ -15,13 +15,134 @@ import base64
 import re
 import requests
 from typing import Optional, List
-from datetime import datetime, time as dt_time
+from datetime import datetime, time as dt_time, timedelta
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
 
 # Configuração de Log
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
+
+# =========================================================
+# SCHEDULER: LEMBRETES AUTOMÁTICOS
+# =========================================================
+scheduler = BackgroundScheduler(timezone="America/Sao_Paulo")
+
+def job_lembrete_24h():
+    """Roda a cada hora: envia lembrete 24h antes da consulta."""
+    conn = db_pool.getconn()
+    try:
+        agora = datetime.now()
+        janela_inicio = agora + timedelta(hours=23)
+        janela_fim    = agora + timedelta(hours=25)
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT c.id_consulta, p.telefone, p.nome AS paciente_nome,
+                       m.nome AS medico_nome, d.inicio_datetime,
+                       cfg.msg_lembrete_24h
+                FROM consulta c
+                JOIN disponibilidade d ON d.id_disponibilidade = c.id_disponibilidade
+                JOIN paciente p ON p.id_paciente = c.id_paciente
+                JOIN medico m ON m.id_medico = d.id_medico
+                LEFT JOIN configuracao_sistema cfg ON TRUE
+                WHERE c.status IN ('AGENDADA','CONFIRMADA')
+                  AND c.lembrete_24h_enviado = FALSE
+                  AND d.inicio_datetime BETWEEN %s AND %s
+            """, (janela_inicio, janela_fim))
+            consultas = cur.fetchall()
+
+        for c in consultas:
+            nome_curto = c['paciente_nome'].split()[0]
+            data_fmt = c['inicio_datetime'].strftime('%d/%m às %H:%M')
+            msg_template = c.get('msg_lembrete_24h') or (
+                f"Olá, {nome_curto}! 👋\n\n"
+                f"Lembramos que você tem consulta com *{c['medico_nome']}* "
+                f"amanhã, *{data_fmt}*.\n\n"
+                f"Para confirmar, responda *1 - Confirmar* ou *2 - Cancelar*. 🏥"
+            )
+            mensagem = msg_template.replace('{nome}', nome_curto).replace('{medico}', c['medico_nome']).replace('{data}', data_fmt)
+            enviar_mensagem_whatsapp(c['telefone'], mensagem)
+
+            # Marca como enviado e atualiza status
+            conn2 = db_pool.getconn()
+            try:
+                with conn2.cursor() as cur2:
+                    cur2.execute("""
+                        UPDATE consulta SET lembrete_24h_enviado = TRUE, status = 'CONFIRMADA'
+                        WHERE id_consulta = %s
+                    """, (c['id_consulta'],))
+                    conn2.commit()
+            finally:
+                db_pool.putconn(conn2)
+            logger.info(f"Lembrete 24h enviado para {c['telefone']} (consulta {c['id_consulta']})")
+    except Exception as e:
+        logger.error(f"Erro no job_lembrete_24h: {e}")
+    finally:
+        db_pool.putconn(conn)
+
+
+def job_lembrete_dia():
+    """Roda às 07:30 todo dia: envia lembrete no dia da consulta."""
+    conn = db_pool.getconn()
+    try:
+        hoje_inicio = datetime.now().replace(hour=0,  minute=0,  second=0, microsecond=0)
+        hoje_fim    = datetime.now().replace(hour=23, minute=59, second=59, microsecond=0)
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT c.id_consulta, p.telefone, p.nome AS paciente_nome,
+                       m.nome AS medico_nome, d.inicio_datetime,
+                       cfg.msg_lembrete_dia
+                FROM consulta c
+                JOIN disponibilidade d ON d.id_disponibilidade = c.id_disponibilidade
+                JOIN paciente p ON p.id_paciente = c.id_paciente
+                JOIN medico m ON m.id_medico = d.id_medico
+                LEFT JOIN configuracao_sistema cfg ON TRUE
+                WHERE c.status IN ('AGENDADA','CONFIRMADA')
+                  AND c.lembrete_dia_enviado = FALSE
+                  AND d.inicio_datetime BETWEEN %s AND %s
+            """, (hoje_inicio, hoje_fim))
+            consultas = cur.fetchall()
+
+        for c in consultas:
+            nome_curto = c['paciente_nome'].split()[0]
+            hora_fmt = c['inicio_datetime'].strftime('%H:%M')
+            msg_template = c.get('msg_lembrete_dia') or (
+                f"Bom dia, {nome_curto}! ☀️\n\n"
+                f"Hoje é o dia da sua consulta com *{c['medico_nome']}* às *{hora_fmt}*.\n\n"
+                f"Lembre-se de chegar com 10 minutos de antecedência. Te esperamos! 🏥"
+            )
+            mensagem = msg_template.replace('{nome}', nome_curto).replace('{medico}', c['medico_nome']).replace('{hora}', hora_fmt)
+            enviar_mensagem_whatsapp(c['telefone'], mensagem)
+
+            conn2 = db_pool.getconn()
+            try:
+                with conn2.cursor() as cur2:
+                    cur2.execute("""
+                        UPDATE consulta SET lembrete_dia_enviado = TRUE
+                        WHERE id_consulta = %s
+                    """, (c['id_consulta'],))
+                    conn2.commit()
+            finally:
+                db_pool.putconn(conn2)
+            logger.info(f"Lembrete do dia enviado para {c['telefone']} (consulta {c['id_consulta']})")
+    except Exception as e:
+        logger.error(f"Erro no job_lembrete_dia: {e}")
+    finally:
+        db_pool.putconn(conn)
+
+
+@app.on_event("startup")
+def start_scheduler():
+    scheduler.add_job(job_lembrete_24h, 'interval', hours=1, id='lembrete_24h')
+    scheduler.add_job(job_lembrete_dia, CronTrigger(hour=7, minute=30), id='lembrete_dia')
+    scheduler.start()
+    logger.info("✅ Scheduler de lembretes iniciado.")
+
+@app.on_event("shutdown")
+def stop_scheduler():
+    scheduler.shutdown(wait=False)
 
 @app.get("/")
 def serve_dashboard():
