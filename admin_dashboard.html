@@ -1351,7 +1351,7 @@ async function loadConexao() {
       badge.className = 'badge red dot';
       badge.textContent = 'Desconectado';
       // Fetch QR Code
-      const qrData = await api('GET', '/api/admin/whatsapp/qrcode').catch(e => ({ error: e.message }));
+      const qrData = await api('GET', '/api/admin/whatsapp/qrcode?instance=' + data.instance).catch(e => ({ error: e.message }));
       if (qrData && qrData.base64) {
         document.getElementById('conexao-qr-img').src = qrData.base64;
         containerQr.style.display = 'block';

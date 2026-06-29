@@ -1505,14 +1505,14 @@ def whatsapp_status():
             return {"status": "erro", "message": str(instances)}
 
         if not instances:
-            payload = {"instanceName": "clinica", "qrcode": True, "integration": "WHATSAPP-BAILEYS"}
+            payload = {"instanceName": "bot", "qrcode": True, "integration": "WHATSAPP-BAILEYS"}
             res = requests.post(f"{EVOLUTION_API_URL}/instance/create", json=payload, headers=headers, timeout=10)
             if res.status_code not in (200, 201):
                 return {"status": "erro", "message": f"Erro ao criar instância: {res.text}"}
-            return {"status": "desconectado", "instance": "clinica"}
+            return {"status": "desconectado", "instance": "bot"}
             
         inst = instances[0]
-        instance_name = inst.get("instance/instanceName", inst.get("instanceName", "clinica"))
+        instance_name = inst.get("name", inst.get("instanceName", "bot"))
         state = inst.get("connectionStatus", "DISCONNECTED")
         if state == "open" or state == "ONLINE":
             return {"status": "conectado", "instance": instance_name}
@@ -1521,7 +1521,7 @@ def whatsapp_status():
         return {"status": "erro", "message": str(e)}
 
 @app.get("/api/admin/whatsapp/qrcode")
-def whatsapp_qrcode(instance: str = "clinica"):
+def whatsapp_qrcode(instance: str = "bot"):
     try:
         headers = {"apikey": EVOLUTION_API_KEY}
         r = requests.get(f"{EVOLUTION_API_URL}/instance/connect/{instance}", headers=headers, timeout=5)
@@ -1532,7 +1532,7 @@ def whatsapp_qrcode(instance: str = "clinica"):
         return {"error": str(e)}
 
 @app.post("/api/admin/whatsapp/logout")
-def whatsapp_logout(instance: str = "clinica"):
+def whatsapp_logout(instance: str = "bot"):
     try:
         headers = {"apikey": EVOLUTION_API_KEY}
         r = requests.delete(f"{EVOLUTION_API_URL}/instance/logout/{instance}", headers=headers, timeout=5)
