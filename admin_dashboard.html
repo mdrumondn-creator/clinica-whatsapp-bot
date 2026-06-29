@@ -481,6 +481,18 @@
       padding: 2rem;
     }
 
+    /* ===================== PRINT ===================== */
+    @media print {
+      body { background: #fff !important; color: #000 !important; }
+      .sidebar, .topbar, #login-screen, #toast,
+      .no-print, .btn, [id^="modal-"] { display: none !important; }
+      .main { margin-left: 0 !important; }
+      .card { border: 1px solid #ccc !important; box-shadow: none !important; background: #fff !important; }
+      th, td { color: #000 !important; border-color: #ccc !important; }
+      th { background: #f5f5f5 !important; }
+      .badge { border: 1px solid #999 !important; color: #000 !important; background: transparent !important; }
+    }
+
     /* ===================== NOTIFICATION TOAST ===================== */
     #toast {
       position: fixed; bottom: 1.5rem; right: 1.5rem;
@@ -782,21 +794,46 @@
 
     <!-- PAGE: CONSULTAS -->
     <div class="page animate-in" id="page-consultas">
-      <div class="card">
-        <div class="card-header">
-          <div class="card-title">📋 Próximas Consultas</div>
-          <button class="btn btn-primary" onclick="loadConsultas()" style="font-size:.8rem;padding:.4rem .8rem;">🔄 Atualizar</button>
+
+      <!-- Filtros + Ações -->
+      <div class="card" style="margin-bottom:1rem;">
+        <div class="card-header" style="flex-wrap:wrap;gap:.75rem;">
+          <div class="card-title">🔍 Filtrar Consultas</div>
+          <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;">
+            <button class="btn btn-primary" style="font-size:.8rem;" onclick="abrirModalAgendamentoManual()">➕ Agendar Manual</button>
+            <button class="btn btn-ghost"   style="font-size:.8rem;" onclick="exportarCSV()">📥 Exportar CSV</button>
+            <button class="btn btn-ghost"   style="font-size:.8rem;" onclick="exportarPDF()">🖨️ Imprimir / PDF</button>
+            <button class="btn btn-ghost"   style="font-size:.8rem;" onclick="loadConsultas()">🔄 Atualizar</button>
+          </div>
         </div>
-        <div class="table-responsive">
-          <table>
+        <div class="grid-2" style="gap:.75rem;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="inp-filtro-inicio">De</label>
+            <input type="date" id="inp-filtro-inicio" />
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="inp-filtro-fim">Até</label>
+            <input type="date" id="inp-filtro-fim" />
+          </div>
+        </div>
+        <button class="btn btn-primary" style="margin-top:.75rem;" onclick="loadConsultas()">Buscar</button>
+      </div>
+
+      <div class="card" id="card-consultas-print">
+        <div class="card-header">
+          <div class="card-title">📋 Consultas</div>
+        </div>
+        <div class="table-wrap">
+          <table id="tbl-consultas">
             <thead>
               <tr>
                 <th>Data / Hora</th>
                 <th>Paciente</th>
                 <th>Telefone</th>
                 <th>Médico</th>
+                <th>Especialidade</th>
                 <th>Status</th>
-                <th>Ações</th>
+                <th class="no-print">Ações</th>
               </tr>
             </thead>
             <tbody id="tbody-consultas">
@@ -806,6 +843,39 @@
         </div>
       </div>
     </div>
+
+    <!-- MODAL: AGENDAMENTO MANUAL -->
+    <div id="modal-agendamento" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);align-items:center;justify-content:center;z-index:9998;backdrop-filter:blur(4px);">
+      <div class="card" style="width:100%;max-width:520px;margin:1rem;position:relative;box-shadow:0 16px 48px rgba(0,0,0,.7);">
+        <button onclick="document.getElementById('modal-agendamento').style.display='none'" style="position:absolute;top:1rem;right:1rem;background:none;border:none;color:var(--text-1);font-size:1.4rem;cursor:pointer;">&times;</button>
+        <div class="card-header" style="border-bottom:1px solid var(--border);padding-bottom:.75rem;margin-bottom:1rem;">
+          <div class="card-title">➕ Agendamento Manual</div>
+        </div>
+        <div id="modal-ag-alert" class="alert hidden"></div>
+        <div class="grid-2">
+          <div class="form-group">
+            <label for="ag-cpf">CPF do Paciente</label>
+            <input id="ag-cpf" type="text" placeholder="000.000.000-00" />
+          </div>
+          <div class="form-group">
+            <label for="ag-tel">Telefone (WhatsApp)</label>
+            <input id="ag-tel" type="text" placeholder="(31) 99999-9999" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="ag-nome">Nome do Paciente <span style="color:var(--text-3);font-size:.75rem;">(se novo cadastro)</span></label>
+          <input id="ag-nome" type="text" placeholder="Nome completo" />
+        </div>
+        <div class="form-group">
+          <label for="ag-slot">Horário Disponível</label>
+          <select id="ag-slot">
+            <option value="">— Selecione um horário —</option>
+          </select>
+        </div>
+        <button class="btn btn-primary btn-full" onclick="confirmarAgendamentoManual()">✅ Confirmar Agendamento</button>
+      </div>
+    </div>
+
 
     <!-- PAGE: AGENDA -->
     <div class="page animate-in" id="page-agenda">
@@ -1360,23 +1430,35 @@ async function loadAgenda() {
 }
 
 // ===================== CONSULTAS =====================
+let _consultasCache = [];
+
 async function loadConsultas() {
   try {
-    const data = await api('GET', '/api/admin/consultas');
+    const ini = document.getElementById('inp-filtro-inicio')?.value;
+    const fim = document.getElementById('inp-filtro-fim')?.value;
+    let url = '/api/admin/consultas';
+    const params = [];
+    if (ini) params.push('data_inicio=' + ini);
+    if (fim) params.push('data_fim=' + fim);
+    if (params.length) url += '?' + params.join('&');
+
+    const data = await api('GET', url);
+    _consultasCache = data.consultas || [];
     const tbody = document.getElementById('tbody-consultas');
-    if (data.consultas.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="6"><div class="empty-state"><div class="icon">📭</div><p>Nenhuma consulta agendada</p></div></td></tr>`;
+    if (_consultasCache.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="icon">📭</div><p>Nenhuma consulta encontrada</p></div></td></tr>`;
     } else {
-      tbody.innerHTML = data.consultas.map(c => `
-        <tr style="cursor:pointer; transition: background 0.2s;" onmouseover="this.style.background='var(--bg-base)'" onmouseout="this.style.background='transparent'" onclick="openConsultaModal(${c.id_paciente}, '${c.paciente_nome || 'Desconhecido'}', '${c.paciente_telefone || '—'}', '${c.paciente_cpf || 'Não informado'}')">
+      tbody.innerHTML = _consultasCache.map(c => `
+        <tr style="cursor:pointer;" onclick="openConsultaModal(${c.id_paciente}, '${(c.paciente_nome||'').replace(/'/g,"\\'")}', '${c.paciente_telefone||'—'}', '${c.paciente_cpf||''}')">
           <td>${fmtDatetime(c.inicio)}</td>
           <td><strong>${c.paciente_nome || 'Desconhecido'}</strong></td>
           <td>${c.paciente_telefone || '—'}</td>
           <td>${c.medico_nome || '—'}</td>
+          <td>${c.especialidade || '—'}</td>
           <td>${statusBadge(c.status)}</td>
-          <td>
-            ${c.status === 'AGENDADA' || c.status === 'CONFIRMADA' ? 
-              `<button class="btn btn-ghost" style="color:var(--danger);font-size:.75rem;padding:.3rem .5rem;" onclick="event.stopPropagation(); cancelarConsulta(${c.id_consulta})">❌ Cancelar</button>` 
+          <td class="no-print">
+            ${c.status === 'AGENDADA' || c.status === 'CONFIRMADA'
+              ? `<button class="btn btn-ghost" style="color:var(--danger);font-size:.75rem;padding:.3rem .5rem;" onclick="event.stopPropagation(); cancelarConsulta(${c.id_consulta})">❌ Cancelar</button>`
               : ''}
           </td>
         </tr>
@@ -1386,6 +1468,82 @@ async function loadConsultas() {
     console.error('Erro ao carregar consultas:', e);
   }
 }
+
+// ===================== EXPORTAR CSV =====================
+function exportarCSV() {
+  if (!_consultasCache.length) { toast('Nenhuma consulta para exportar.', 'error'); return; }
+  const header = ['Data/Hora','Paciente','Telefone','CPF','Médico','Especialidade','Status'];
+  const rows = _consultasCache.map(c => [
+    fmtDatetime(c.inicio), c.paciente_nome||'', c.paciente_telefone||'',
+    c.paciente_cpf||'', c.medico_nome||'', c.especialidade||'', c.status
+  ]);
+  const csv = [header, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `consultas_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  toast('CSV exportado com sucesso!', 'success');
+}
+
+// ===================== EXPORTAR PDF (via print) =====================
+function exportarPDF() {
+  if (!_consultasCache.length) { toast('Nenhuma consulta para imprimir.', 'error'); return; }
+  window.print();
+}
+
+// ===================== AGENDAMENTO MANUAL =====================
+async function abrirModalAgendamentoManual() {
+  document.getElementById('modal-ag-alert').className = 'alert hidden';
+  ['ag-cpf','ag-tel','ag-nome'].forEach(id => document.getElementById(id).value = '');
+
+  // Carrega slots livres
+  const sel = document.getElementById('ag-slot');
+  sel.innerHTML = '<option value="">Carregando...</option>';
+  try {
+    const data = await api('GET', '/api/admin/agenda');
+    const livres = (data.agenda || []).filter(a => !a.id_consulta);
+    if (livres.length === 0) {
+      sel.innerHTML = '<option value="">Nenhum horário livre</option>';
+    } else {
+      sel.innerHTML = '<option value="">— Selecione um horário —</option>' +
+        livres.map(a => `<option value="${a.id_disponibilidade}">${fmtDatetime(a.inicio_datetime)} — ${a.medico_nome} (${a.especialidade||a.medico_nome})</option>`).join('');
+    }
+  } catch(e) {
+    sel.innerHTML = '<option value="">Erro ao carregar</option>';
+  }
+  document.getElementById('modal-agendamento').style.display = 'flex';
+}
+
+async function confirmarAgendamentoManual() {
+  const al = document.getElementById('modal-ag-alert');
+  al.className = 'alert hidden';
+  const id_slot = document.getElementById('ag-slot').value;
+  const cpf  = document.getElementById('ag-cpf').value.trim();
+  const tel  = document.getElementById('ag-tel').value.trim();
+  const nome = document.getElementById('ag-nome').value.trim();
+
+  if (!id_slot) { al.className='alert error'; al.textContent='⚠️ Selecione um horário.'; return; }
+  if (!cpf && !tel) { al.className='alert error'; al.textContent='⚠️ Informe CPF ou Telefone do paciente.'; return; }
+
+  try {
+    await api('POST', '/api/admin/consultas/manual', {
+      id_disponibilidade: parseInt(id_slot),
+      cpf: cpf || null,
+      telefone: tel || null,
+      nome_paciente: nome || null
+    });
+    document.getElementById('modal-agendamento').style.display = 'none';
+    toast('Consulta agendada com sucesso! ✅', 'success');
+    loadConsultas();
+    loadAgenda();
+    loadDashboard();
+  } catch(e) {
+    al.className = 'alert error';
+    al.textContent = '❌ ' + e.message;
+  }
+}
+
 
 async function openConsultaModal(id_paciente, nome, tel, cpf) {
   if(!id_paciente) return;

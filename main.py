@@ -1196,40 +1196,146 @@ def mensagens_pendentes(user=Depends(admin_auth)):
 
 
 # =========================================================
-# ENDPOINT: LISTAR CONSULTAS
+# ENDPOINT: LISTAR CONSULTAS (com filtro de data)
 # =========================================================
 @app.get("/api/admin/consultas")
-def get_consultas(req_user=Depends(verificar_token_jwt)):
+def get_consultas(data_inicio: Optional[str] = None, data_fim: Optional[str] = None, req_user=Depends(verificar_token_jwt)):
     conn = db_pool.getconn()
     try:
+        # Define janela de datas
+        if data_inicio:
+            dt_inicio = datetime.fromisoformat(data_inicio)
+        else:
+            dt_inicio = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+
+        if data_fim:
+            dt_fim = datetime.fromisoformat(data_fim).replace(hour=23, minute=59, second=59)
+        else:
+            dt_fim = dt_inicio.replace(hour=23, minute=59, second=59) + __import__('datetime').timedelta(days=90)
+
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute("""
-                SELECT 
-                    c.id_consulta, 
+                SELECT
+                    c.id_consulta,
                     c.status,
                     p.id_paciente,
-                    p.nome as paciente_nome,
-                    p.telefone as paciente_telefone,
-                    p.cpf as paciente_cpf,
-                    d.data_hora_inicio as inicio,
-                    d.data_hora_fim as fim,
-                    m.nome as medico_nome
+                    p.nome  AS paciente_nome,
+                    p.telefone AS paciente_telefone,
+                    p.cpf   AS paciente_cpf,
+                    d.inicio_datetime AS inicio,
+                    d.fim_datetime    AS fim,
+                    m.nome  AS medico_nome,
+                    m.especialidade
                 FROM consulta c
-                JOIN paciente p ON c.id_paciente = p.id_paciente
+                JOIN paciente p      ON c.id_paciente       = p.id_paciente
                 JOIN disponibilidade d ON c.id_disponibilidade = d.id_disponibilidade
-                JOIN medico m ON d.id_medico = m.id_medico
-                WHERE d.data_hora_inicio >= CURRENT_DATE
-                ORDER BY d.data_hora_inicio ASC
-            """)
+                JOIN medico m         ON d.id_medico          = m.id_medico
+                WHERE c.status NOT IN ('CANCELADA','CANCELADA_CLINICA','FALTOU')
+                  AND d.inicio_datetime BETWEEN %s AND %s
+                ORDER BY d.inicio_datetime ASC
+            """, (dt_inicio, dt_fim))
             consultas = cur.fetchall()
-            
-            for c in consultas:
-                if c["inicio"]: c["inicio"] = c["inicio"].isoformat()
-                if c["fim"]: c["fim"] = c["fim"].isoformat()
-                
+
+        for c in consultas:
+            if c["inicio"]: c["inicio"] = c["inicio"].isoformat()
+            if c["fim"]:    c["fim"]    = c["fim"].isoformat()
+
         return {"consultas": consultas}
     except Exception as e:
         logger.error(f"Erro ao buscar consultas: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db_pool.putconn(conn)
+
+
+# =========================================================
+# ENDPOINT: AGENDAMENTO MANUAL PELO PAINEL
+# =========================================================
+class AgendamentoManual(BaseModel):
+    id_disponibilidade: int
+    cpf: Optional[str] = None
+    telefone: Optional[str] = None
+    nome_paciente: Optional[str] = None
+
+@app.post("/api/admin/consultas/manual")
+def agendar_manual(req: AgendamentoManual, user=Depends(admin_auth)):
+    conn = db_pool.getconn()
+    try:
+        # 1. Verificar disponibilidade
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT d.id_disponibilidade, d.status, d.inicio_datetime
+                FROM disponibilidade d
+                WHERE d.id_disponibilidade = %s
+                FOR UPDATE
+            """, (req.id_disponibilidade,))
+            slot = cur.fetchone()
+
+        if not slot:
+            raise HTTPException(status_code=404, detail="Horário não encontrado")
+
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT 1 FROM consulta
+                WHERE id_disponibilidade = %s AND status NOT IN ('CANCELADA','CANCELADA_CLINICA','FALTOU')
+            """, (req.id_disponibilidade,))
+            if cur.fetchone():
+                raise HTTPException(status_code=409, detail="Horário já ocupado")
+
+        # 2. Localizar ou criar paciente
+        id_paciente = None
+        if req.cpf:
+            digits = re.sub(r"\D", "", req.cpf)
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT id_paciente FROM paciente
+                    WHERE regexp_replace(coalesce(cpf,''),'\\D','','g') = %s LIMIT 1
+                """, (digits,))
+                res = cur.fetchone()
+                if res:
+                    id_paciente = res[0]
+
+        if not id_paciente and req.telefone:
+            telefone = re.sub(r"\D", "", req.telefone)
+            with conn.cursor() as cur:
+                cur.execute("SELECT id_paciente FROM paciente WHERE telefone = %s LIMIT 1", (telefone,))
+                res = cur.fetchone()
+                if res:
+                    id_paciente = res[0]
+
+        if not id_paciente:
+            # Cria paciente novo
+            if not req.nome_paciente:
+                raise HTTPException(status_code=422, detail="Paciente não encontrado. Informe o nome para cadastrar.")
+            cpf_val   = re.sub(r"\D", "", req.cpf or "")
+            tel_val   = re.sub(r"\D", "", req.telefone or "")
+            with conn.cursor() as cur:
+                cur.execute("""
+                    INSERT INTO paciente (nome, cpf, telefone, aceite_lgpd, data_aceite_lgpd)
+                    VALUES (%s, %s, %s, TRUE, CURRENT_TIMESTAMP)
+                    RETURNING id_paciente
+                """, (req.nome_paciente, cpf_val or None, tel_val or None))
+                id_paciente = cur.fetchone()[0]
+                conn.commit()
+
+        # 3. Criar consulta
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO consulta (id_paciente, id_disponibilidade, status)
+                VALUES (%s, %s, 'CONFIRMADA')
+                RETURNING id_consulta
+            """, (id_paciente, req.id_disponibilidade))
+            id_consulta = cur.fetchone()[0]
+            conn.commit()
+
+        logger.info(f"Agendamento manual: consulta {id_consulta} criada pelo admin {user.get('sub')}")
+        return {"sucesso": True, "id_consulta": id_consulta}
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Erro no agendamento manual: {e}")
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         db_pool.putconn(conn)
