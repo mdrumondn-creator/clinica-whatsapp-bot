@@ -1260,7 +1260,7 @@ async function doLogin() {
     document.getElementById('login-screen').classList.add('hide');
     document.getElementById('app').classList.add('show');
 
-    await Promise.all([loadDashboard(), loadConfig(), loadMedicos(), loadAgenda(), loadConsultas(), loadMensagens()]);
+    await Promise.all([loadDashboard(), loadConfig(), loadMedicos(), loadAgenda(), loadConsultas(), loadMensagens(), loadConexao()]);
   } catch (e) {
     alert.className = 'alert error';
     alert.textContent = '❌ ' + e.message;
@@ -1302,6 +1302,7 @@ function showPage(name) {
     mensagens: 'Mensagens'
   };
   document.getElementById('page-title').textContent = titles[name] || name;
+  refreshCurrentPage();
 }
 
 function refreshCurrentPage() {
@@ -1938,7 +1939,7 @@ setInterval(() => {
     document.getElementById('user-avatar').textContent = currentUser.nome.charAt(0).toUpperCase();
     document.getElementById('login-screen').classList.add('hide');
     document.getElementById('app').classList.add('show');
-    await Promise.all([loadDashboard(), loadConfig(), loadMedicos(), loadAgenda(), loadConsultas(), loadMensagens()]);
+    await Promise.all([loadDashboard(), loadConfig(), loadMedicos(), loadAgenda(), loadConsultas(), loadMensagens(), loadConexao()]);
   } catch(e) {
     // Se falhar, exibe a tela de login normalmente
     console.warn('Auto-login falhou, exibindo tela de login.', e);
