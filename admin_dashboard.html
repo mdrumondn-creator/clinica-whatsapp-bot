@@ -33,24 +33,39 @@
       --radius:     12px;
       --radius-lg:  18px;
       --shadow:     0 8px 32px rgba(0,0,0,.6);
-      --transition: .18s cubic-bezier(.4,0,.2,1);
-      --transition: .18s cubic-bezier(.4,0,.2,1);
       --grad-primary: linear-gradient(135deg, var(--accent-s), var(--info));
       --grad-card: linear-gradient(160deg, #0e1320 0%, #0a1020 100%);
+      --sidebar-bg: #0a1020;
+      --sidebar-bg-2: #07090f;
+      --topbar-bg: rgba(7,9,15,.85);
+      --login-bg: radial-gradient(ellipse at 60% 40%, #0c1a2e 0%, #07090f 70%);
+      --badge-g-bg: rgba(46,160,67,.2); --badge-g-border: rgba(46,160,67,.35); --badge-g-text: #34d399;
+      --badge-r-bg: rgba(218,54,51,.2); --badge-r-border: rgba(218,54,51,.35); --badge-r-text: #f87171;
+      --badge-y-bg: rgba(210,153,34,.2); --badge-y-border: rgba(210,153,34,.35); --badge-y-text: #fbbf24;
+      --badge-b-bg: rgba(31,111,235,.2); --badge-b-border: rgba(31,111,235,.35); --badge-b-text: #60a5fa;
     }
 
     [data-theme="light"] {
-      --bg-base:    #f8fafc;
+      --bg-base:    #f1f5f9;
       --bg-card:    #ffffff;
-      --bg-input:   #f1f5f9;
-      --bg-hover:   #f1f5f9;
-      --border:     #e2e8f0;
+      --bg-input:   #f8fafc;
+      --bg-hover:   #e2e8f0;
+      --border:     #cbd5e1;
       --text-1:     #0f172a;
       --text-2:     #334155;
       --text-3:     #64748b;
-      --shadow:     0 6px 20px rgba(0,0,0,.06);
+      --shadow:     0 4px 16px rgba(0,0,0,.04);
       --grad-card:  linear-gradient(160deg, #ffffff 0%, #f8fafc 100%);
+      --sidebar-bg: #f8fafc;
+      --sidebar-bg-2: #f1f5f9;
+      --topbar-bg: rgba(255,255,255,.85);
+      --login-bg: radial-gradient(ellipse at 60% 40%, #e2e8f0 0%, #f1f5f9 70%);
+      --badge-g-bg: #dcfce7; --badge-g-border: #86efac; --badge-g-text: #166534;
+      --badge-r-bg: #fee2e2; --badge-r-border: #fca5a5; --badge-r-text: #991b1b;
+      --badge-y-bg: #fef3c7; --badge-y-border: #fde047; --badge-y-text: #854d0e;
+      --badge-b-bg: #dbeafe; --badge-b-border: #93c5fd; --badge-b-text: #1e40af;
     }
+
 
     html { font-size: 15px; }
     body {
@@ -70,7 +85,7 @@
     #login-screen {
       position: fixed; inset: 0;
       display: flex; align-items: center; justify-content: center;
-      background: radial-gradient(ellipse at 60% 40%, #0c1a2e 0%, #07090f 70%);
+      background: var(--login-bg);
       z-index: 999;
       transition: opacity .4s ease, transform .4s ease;
     }
@@ -85,8 +100,8 @@
     }
 
     .login-card {
-      background: linear-gradient(160deg, #0e1929 0%, #0a1020 100%);
-      border: 1px solid rgba(14,165,233,.2);
+      background: var(--grad-card);
+      border: 1px solid var(--border);
       border-radius: var(--radius-lg);
       padding: 2.8rem 2.2rem;
       width: 100%; max-width: 400px;
@@ -200,7 +215,7 @@
     /* Sidebar */
     .sidebar {
       width: 240px; flex-shrink: 0;
-      background: linear-gradient(180deg, #0a1020 0%, #07090f 100%);
+      background: linear-gradient(180deg, var(--sidebar-bg) 0%, var(--sidebar-bg-2) 100%);
       border-right: 1px solid var(--border);
       display: flex; flex-direction: column;
       position: fixed; top: 0; left: 0; bottom: 0;
@@ -283,7 +298,7 @@
     }
 
     .topbar {
-      background: rgba(7,9,15,.85);
+      background: var(--topbar-bg);
       backdrop-filter: blur(12px);
       border-bottom: 1px solid var(--border);
       padding: .9rem 1.75rem;
@@ -334,8 +349,9 @@
       padding: 1.3rem 1.5rem;
       position: relative; overflow: hidden;
       transition: transform var(--transition), box-shadow var(--transition);
+      box-shadow: var(--shadow);
     }
-    .stat-card:hover { transform: translateY(-3px); box-shadow: 0 12px 32px rgba(0,0,0,.4); }
+    .stat-card:hover { transform: translateY(-3px); box-shadow: 0 12px 32px rgba(0,0,0,.15); }
     .stat-card::before {
       content: '';
       position: absolute; top: 0; left: 0; right: 0; height: 2px;
@@ -395,7 +411,7 @@
     }
     td {
       padding: .75rem 1rem;
-      border-bottom: 1px solid rgba(48,54,61,.5);
+      border-bottom: 1px solid var(--border);
       color: var(--text-1);
       vertical-align: middle;
     }
@@ -410,10 +426,10 @@
       font-size: .72rem; font-weight: 600;
       text-transform: uppercase; letter-spacing: .04em;
     }
-    .badge.green { background: rgba(46,160,67,.2); color: var(--accent-g); border: 1px solid rgba(46,160,67,.35); }
-    .badge.red { background: rgba(218,54,51,.2); color: var(--danger-s); border: 1px solid rgba(218,54,51,.35); }
-    .badge.yellow { background: rgba(210,153,34,.2); color: var(--warning-s); border: 1px solid rgba(210,153,34,.35); }
-    .badge.blue { background: rgba(31,111,235,.2); color: var(--info-s); border: 1px solid rgba(31,111,235,.35); }
+    .badge.green { background: var(--badge-g-bg); color: var(--badge-g-text); border: 1px solid var(--badge-g-border); }
+    .badge.red { background: var(--badge-r-bg); color: var(--badge-r-text); border: 1px solid var(--badge-r-border); }
+    .badge.yellow { background: var(--badge-y-bg); color: var(--badge-y-text); border: 1px solid var(--badge-y-border); }
+    .badge.blue { background: var(--badge-b-bg); color: var(--badge-b-text); border: 1px solid var(--badge-b-border); }
     .badge.dot::before {
       content: ''; display: block;
       width: 6px; height: 6px; border-radius: 50%;
@@ -662,17 +678,7 @@
           <div class="stat-label">Horários Livres</div>
           <div class="stat-value" id="stat-livres">—</div>
           <div class="stat-sub">disponíveis hoje</div>
-        </div>      <!-- Gráfico de Atendimentos -->
-      <div class="card" style="margin-top:1.25rem;">
-        <div class="card-header">
-          <div class="card-title">📈 Atendimentos por Dia <span style="font-size:.75rem;color:var(--text-3);font-weight:400;">(últimos 7 + próximos 14 dias)</span></div>
-          <button class="btn btn-ghost" style="font-size:.75rem;padding:.35rem .7rem;" onclick="loadChart()">🔄</button>
         </div>
-        <div style="position:relative;height:220px;">
-          <canvas id="chart-agenda"></canvas>
-        </div>
-      </div>
-
         <div class="stat-card yellow" data-icon="💬" style="cursor:pointer;" onclick="showPage('mensagens')">
           <div class="stat-label">Mensagens Hoje</div>
           <div class="stat-value" id="stat-msgs">—</div>
@@ -684,6 +690,18 @@
           <div class="stat-sub">cadastrados</div>
         </div>
       </div>
+
+      <!-- Gráfico de Atendimentos -->
+      <div class="card" style="margin-top:1.25rem;">
+        <div class="card-header">
+          <div class="card-title">📈 Atendimentos por Dia <span style="font-size:.75rem;color:var(--text-3);font-weight:400;">(últimos 7 + próximos 14 dias)</span></div>
+          <button class="btn btn-ghost" style="font-size:.75rem;padding:.35rem .7rem;" onclick="loadChart()">🔄</button>
+        </div>
+        <div style="position:relative;height:220px;">
+          <canvas id="chart-agenda"></canvas>
+        </div>
+      </div>
+
 
       <div class="card">
         <div class="card-header">
@@ -1110,8 +1128,22 @@ function setAccentColor(colorName) {
 
 // Init theme on load
 (function initTheme(){
-  const savedTheme = localStorage.getItem('clinica_theme');
-  if (savedTheme) document.documentElement.setAttribute('data-theme', savedTheme);
+  let savedTheme = localStorage.getItem('clinica_theme');
+  if (!savedTheme) {
+    // Sincroniza com o Windows/OS se não houver preferência salva
+    savedTheme = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+  }
+  document.documentElement.setAttribute('data-theme', savedTheme);
+
+  // Escuta mudanças do OS em tempo real
+  window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', e => {
+    if (!localStorage.getItem('clinica_theme')) { // Só muda se não foi forçado pelo usuário
+      const newTheme = e.matches ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', newTheme);
+      if(_chartAgenda) loadChart();
+    }
+  });
+
   const savedColor = localStorage.getItem('clinica_color');
   if (savedColor) setAccentColor(savedColor);
 })();
