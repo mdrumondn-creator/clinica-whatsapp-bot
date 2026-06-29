@@ -14,6 +14,9 @@ import time
 import base64
 import re
 import requests
+import os
+EVOLUTION_API_URL = os.getenv("EVOLUTION_API_URL", "http://evolution-api:8080")
+EVOLUTION_API_KEY = os.getenv("EVOLUTION_API_KEY", "sua_api_key_super_secreta")
 from typing import Optional, List
 from datetime import datetime, time as dt_time, timedelta
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -1457,3 +1460,47 @@ def get_historico_paciente(id_paciente: int, req_user=Depends(verificar_token_jw
     finally:
         db_pool.putconn(conn)
 
+# =========================================================
+# ENDPOINTS: EVOLUTION API (WHATSAPP CONNECTION)
+# =========================================================
+@app.get("/api/admin/whatsapp/status")
+def whatsapp_status():
+    try:
+        headers = {"apikey": EVOLUTION_API_KEY}
+        r = requests.get(f"{EVOLUTION_API_URL}/instance/fetchInstances", headers=headers, timeout=5)
+        if r.status_code != 200:
+            return {"status": "erro", "message": "Falha na API Evolution"}
+        instances = r.json()
+        if not instances:
+            payload = {"instanceName": "clinica", "qrcode": True, "integration": "WHATSAPP-BAILEYS"}
+            requests.post(f"{EVOLUTION_API_URL}/instance/create", json=payload, headers=headers)
+            return {"status": "desconectado", "instance": "clinica"}
+            
+        inst = instances[0]
+        instance_name = inst.get("instance/instanceName", inst.get("instanceName", "clinica"))
+        state = inst.get("connectionStatus", "DISCONNECTED")
+        if state == "open" or state == "ONLINE":
+            return {"status": "conectado", "instance": instance_name}
+        return {"status": "desconectado", "instance": instance_name}
+    except Exception as e:
+        return {"status": "erro", "message": str(e)}
+
+@app.get("/api/admin/whatsapp/qrcode")
+def whatsapp_qrcode(instance: str = "clinica"):
+    try:
+        headers = {"apikey": EVOLUTION_API_KEY}
+        r = requests.get(f"{EVOLUTION_API_URL}/instance/connect/{instance}", headers=headers, timeout=5)
+        if r.status_code == 200:
+            return r.json()
+        return {"error": "Falha ao gerar QR Code"}
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.post("/api/admin/whatsapp/logout")
+def whatsapp_logout(instance: str = "clinica"):
+    try:
+        headers = {"apikey": EVOLUTION_API_KEY}
+        r = requests.delete(f"{EVOLUTION_API_URL}/instance/logout/{instance}", headers=headers, timeout=5)
+        return {"sucesso": r.status_code == 200}
+    except Exception as e:
+        return {"sucesso": False, "error": str(e)}

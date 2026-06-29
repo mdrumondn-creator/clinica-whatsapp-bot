@@ -635,6 +635,9 @@
         <span class="icon">👨‍⚕️</span> Médicos
       </div>
       <div class="nav-section-label">Sistema</div>
+      <div class="nav-item" id="nav-conexao" onclick="showPage('conexao')">
+        <span class="icon">📱</span> Conexão
+      </div>
       <div class="nav-item" id="nav-config" onclick="showPage('config')">
         <span class="icon">⚙️</span> Controle do Bot
       </div>
@@ -723,6 +726,39 @@
               <tr class="loading-row"><td colspan="5"><div class="spinner"></div></td></tr>
             </tbody>
           </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- PAGE: CONEXAO -->
+    <div class="page animate-in" id="page-conexao">
+      <div class="card" style="max-width: 500px; margin: 0 auto; text-align: center;">
+        <div class="card-header" style="justify-content:center; flex-direction:column; gap:1rem; padding-bottom:1rem; border-bottom:1px solid var(--border); margin-bottom:1.5rem;">
+          <div class="card-title" style="font-size:1.2rem;">📱 Status do WhatsApp</div>
+          <div id="conexao-status-badge" class="badge dot" style="font-size:.9rem; padding:.4rem 1rem;">Verificando...</div>
+        </div>
+
+        <div id="conexao-loading" style="display:none; padding:2rem;">
+          <div class="spinner" style="margin:0 auto;"></div>
+        </div>
+
+        <div id="conexao-qr-container" style="display:none;">
+          <p style="color:var(--text-2); font-size:.9rem; margin-bottom:1rem;">
+            O WhatsApp está desconectado.<br>
+            Abra o WhatsApp no celular da clínica, vá em <b>Aparelhos Conectados</b> e leia o QR Code abaixo:
+          </p>
+          <div style="background:#fff; padding:1rem; border-radius:12px; display:inline-block; margin-bottom:1rem; border:1px solid var(--border);">
+            <img id="conexao-qr-img" src="" alt="QR Code" style="width:250px; height:250px;" />
+          </div>
+          <button class="btn btn-ghost btn-full" onclick="loadConexao()">🔄 Atualizar QR Code</button>
+        </div>
+
+        <div id="conexao-connected-container" style="display:none;">
+          <div style="font-size:4rem; margin-bottom:1rem;">✅</div>
+          <p style="color:var(--text-1); font-weight:600; font-size:1.1rem; margin-bottom:.5rem;">Aparelho conectado com sucesso!</p>
+          <p style="color:var(--text-3); font-size:.85rem; margin-bottom:2rem;">O bot está pronto para enviar e receber mensagens.</p>
+          
+          <button class="btn btn-danger btn-full" onclick="desconectarWhatsapp()">🔌 Desconectar Aparelho</button>
         </div>
       </div>
     </div>
@@ -1258,6 +1294,7 @@ function showPage(name) {
   const titles = {
     dashboard: 'Dashboard',
     config: 'Controle do Bot',
+    conexao: 'Conexão WhatsApp',
     agenda: 'Gestão de Agenda',
     consultas: 'Consultas Agendadas',
     medicos: 'Médicos',
@@ -1268,11 +1305,73 @@ function showPage(name) {
 
 function refreshCurrentPage() {
   if (currentPage === 'dashboard') loadDashboard();
+  else if (currentPage === 'conexao') loadConexao();
   else if (currentPage === 'config') loadConfig();
   else if (currentPage === 'agenda') loadAgenda();
   else if (currentPage === 'consultas') loadConsultas();
   else if (currentPage === 'medicos') loadMedicos();
   else if (currentPage === 'mensagens') loadMensagens();
+}
+
+// ===================== CONEXÃO WHATSAPP =====================
+let conexaoInterval = null;
+async function loadConexao() {
+  const containerQr = document.getElementById('conexao-qr-container');
+  const containerConnected = document.getElementById('conexao-connected-container');
+  const loading = document.getElementById('conexao-loading');
+  const badge = document.getElementById('conexao-status-badge');
+  
+  if(conexaoInterval) clearInterval(conexaoInterval);
+  
+  containerQr.style.display = 'none';
+  containerConnected.style.display = 'none';
+  loading.style.display = 'block';
+  badge.className = 'badge yellow dot';
+  badge.textContent = 'Verificando...';
+
+  try {
+    const data = await api('GET', '/api/admin/whatsapp/status');
+    loading.style.display = 'none';
+
+    if (data.status === 'conectado') {
+      badge.className = 'badge green dot';
+      badge.textContent = 'Conectado';
+      containerConnected.style.display = 'block';
+    } else {
+      badge.className = 'badge red dot';
+      badge.textContent = 'Desconectado';
+      // Fetch QR Code
+      const qrData = await api('GET', '/api/admin/whatsapp/qrcode');
+      if (qrData && qrData.base64) {
+        document.getElementById('conexao-qr-img').src = qrData.base64;
+        containerQr.style.display = 'block';
+        // Auto refresh until connected
+        conexaoInterval = setInterval(async () => {
+          if (currentPage !== 'conexao') { clearInterval(conexaoInterval); return; }
+          const st = await api('GET', '/api/admin/whatsapp/status');
+          if (st.status === 'conectado') { clearInterval(conexaoInterval); loadConexao(); }
+        }, 5000);
+      } else {
+        toast('Erro ao buscar QR Code', 'error');
+      }
+    }
+  } catch (e) {
+    loading.style.display = 'none';
+    badge.className = 'badge red dot';
+    badge.textContent = 'Erro de API';
+    toast('Erro: ' + e.message, 'error');
+  }
+}
+
+async function desconectarWhatsapp() {
+  if (!confirm('Tem certeza que deseja desconectar o WhatsApp da clínica? O bot parará de funcionar imediatamente.')) return;
+  try {
+    await api('POST', '/api/admin/whatsapp/logout');
+    toast('Desconectado com sucesso.', 'success');
+    loadConexao();
+  } catch(e) {
+    toast('Erro ao desconectar: ' + e.message, 'error');
+  }
 }
 
 // ===================== DASHBOARD =====================
