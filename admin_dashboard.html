@@ -2147,5 +2147,34 @@ setInterval(() => {
     </div>
   </div>
 </div>
+  <!-- MODAL USUÁRIO -->
+  <div class="modal-overlay" id="modal-usuario" style="display:none;" onclick="if(event.target===this) this.style.display='none'">
+    <div class="modal-content" style="max-width:400px;">
+      <h3>Novo Usuário</h3>
+      <div class="form-group" style="margin-top:1rem;">
+        <label>Nome</label>
+        <input type="text" id="inp-u-nome" placeholder="Ex: Maria" />
+      </div>
+      <div class="form-group">
+        <label>Login</label>
+        <input type="text" id="inp-u-login" placeholder="Ex: maria.recepcao" />
+      </div>
+      <div class="form-group">
+        <label>Senha</label>
+        <input type="password" id="inp-u-senha" placeholder="***" />
+      </div>
+      <div class="form-group">
+        <label>Perfil</label>
+        <select id="inp-u-perfil">
+          <option value="recepcao">Recepção</option>
+          <option value="admin">Administrador</option>
+        </select>
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:.5rem; margin-top:1.5rem;">
+        <button class="btn btn-ghost" onclick="document.getElementById('modal-usuario').style.display='none'">Cancelar</button>
+        <button class="btn btn-primary" onclick="cadastrarUsuario()">Salvar</button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>
