@@ -1364,6 +1364,7 @@ function refreshCurrentPage() {
   else if (currentPage === 'consultas') loadConsultas();
   else if (currentPage === 'medicos') loadMedicos();
   else if (currentPage === 'mensagens') loadMensagens();
+  else if (currentPage === 'usuarios') loadUsuarios();
 }
 
 // ===================== CONEXÃO WHATSAPP =====================
@@ -2091,34 +2092,7 @@ setInterval(() => {
 </script>
 
 
-  <!-- MODAL USUÁRIO -->
-  <div class="modal-overlay" id="modal-usuario" style="display:none;" onclick="if(event.target===this) this.style.display='none'">
-    <div class="modal-content" style="max-width:400px;">
-      <h3>Novo Usuário</h3>
-      <div class="form-group" style="margin-top:1rem;">
-        <label>Nome</label>
-        <input type="text" id="inp-u-nome" placeholder="Ex: Maria" />
-      </div>
-      <div class="form-group">
-        <label>Login</label>
-        <input type="text" id="inp-u-login" placeholder="Ex: maria.recepcao" />
-      </div>
-      <div class="form-group">
-        <label>Senha</label>
-        <input type="password" id="inp-u-senha" placeholder="***" />
-      </div>
-      <div class="form-group">
-        <label>Perfil</label>
-        <select id="inp-u-perfil">
-          <option value="recepcao">Recepção</option>
-          <option value="admin">Administrador</option>
-        </select>
-      </div>
-      <div style="display:flex; justify-content:flex-end; gap:.5rem; margin-top:1.5rem;">
-        <button class="btn btn-ghost" onclick="document.getElementById('modal-usuario').style.display='none'">Cancelar</button>
-        <button class="btn btn-primary" onclick="cadastrarUsuario()">Salvar</button>
-      </div>
-    </div>
+  
   </div>
 
   <!-- MODAL PACIENTE -->
@@ -2147,25 +2121,31 @@ setInterval(() => {
     </div>
   </div>
 </div>
+  
+  </div>
+
   <!-- MODAL USUÁRIO -->
-  <div class="modal-overlay" id="modal-usuario" style="display:none;" onclick="if(event.target===this) this.style.display='none'">
-    <div class="modal-content" style="max-width:400px;">
-      <h3>Novo Usuário</h3>
+  <div id="modal-usuario" style="display:none; position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);align-items:center;justify-content:center;z-index:9999;backdrop-filter:blur(2px);" onclick="if(event.target===this) this.style.display='none'">
+    <div class="card" style="width: 100%; max-width: 400px; margin: 1rem; position: relative; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
+      <button onclick="document.getElementById('modal-usuario').style.display='none'" style="position:absolute;top:1rem;right:1rem;background:none;border:none;color:var(--text-1);font-size:1.5rem;cursor:pointer;">&times;</button>
+      <div class="card-header" style="border-bottom: 1px solid var(--border); padding-bottom: .5rem; margin-bottom: 1rem;">
+        <div class="card-title"><span class="material-symbols-rounded">person_add</span> Novo Usuário</div>
+      </div>
       <div class="form-group" style="margin-top:1rem;">
         <label>Nome</label>
-        <input type="text" id="inp-u-nome" placeholder="Ex: Maria" />
+        <input type="text" id="inp-u-nome" placeholder="Ex: Maria" style="width:100%; padding:.6rem; border:1px solid var(--border); border-radius:.5rem;" />
       </div>
-      <div class="form-group">
+      <div class="form-group" style="margin-top:1rem;">
         <label>Login</label>
-        <input type="text" id="inp-u-login" placeholder="Ex: maria.recepcao" />
+        <input type="text" id="inp-u-login" placeholder="Ex: maria.recepcao" style="width:100%; padding:.6rem; border:1px solid var(--border); border-radius:.5rem;" />
       </div>
-      <div class="form-group">
+      <div class="form-group" style="margin-top:1rem;">
         <label>Senha</label>
-        <input type="password" id="inp-u-senha" placeholder="***" />
+        <input type="password" id="inp-u-senha" placeholder="***" style="width:100%; padding:.6rem; border:1px solid var(--border); border-radius:.5rem;" />
       </div>
-      <div class="form-group">
+      <div class="form-group" style="margin-top:1rem;">
         <label>Perfil</label>
-        <select id="inp-u-perfil">
+        <select id="inp-u-perfil" style="width:100%; padding:.6rem; border:1px solid var(--border); border-radius:.5rem;">
           <option value="recepcao">Recepção</option>
           <option value="admin">Administrador</option>
         </select>
@@ -2176,5 +2156,6 @@ setInterval(() => {
       </div>
     </div>
   </div>
+
 </body>
 </html>
