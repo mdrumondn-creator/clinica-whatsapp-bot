@@ -1113,7 +1113,7 @@ def stats_agenda_semana(user=Depends(admin_auth)):
                 FROM disponibilidade d
                 LEFT JOIN consulta c
                     ON c.id_disponibilidade = d.id_disponibilidade
-                    AND c.status NOT IN ('CANCELADA','CANCELADA_CLINICA','FALTOU')
+                    AND c.status NOT IN ('CANCELADA','FALTOU')
                 WHERE d.inicio_datetime BETWEEN CURRENT_DATE - INTERVAL '7 days'
                                             AND CURRENT_DATE + INTERVAL '14 days'
                 GROUP BY DATE(d.inicio_datetime)
@@ -1385,7 +1385,7 @@ def get_consultas(data_inicio: Optional[str] = None, data_fim: Optional[str] = N
                 JOIN paciente p      ON c.id_paciente       = p.id_paciente
                 JOIN disponibilidade d ON c.id_disponibilidade = d.id_disponibilidade
                 JOIN medico m         ON d.id_medico          = m.id_medico
-                WHERE c.status NOT IN ('CANCELADA','CANCELADA_CLINICA','FALTOU')
+                WHERE c.status NOT IN ('CANCELADA','CANCELADA','FALTOU')
                   AND d.inicio_datetime BETWEEN %s AND %s
                 ORDER BY d.inicio_datetime ASC
             """, (dt_inicio, dt_fim))
@@ -1432,7 +1432,7 @@ def agendar_manual(req: AgendamentoManual, user=Depends(admin_auth)):
         with conn.cursor() as cur:
             cur.execute("""
                 SELECT 1 FROM consulta
-                WHERE id_disponibilidade = %s AND status NOT IN ('CANCELADA','CANCELADA_CLINICA','FALTOU')
+                WHERE id_disponibilidade = %s AND status NOT IN ('CANCELADA','CANCELADA','FALTOU')
             """, (req.id_disponibilidade,))
             if cur.fetchone():
                 raise HTTPException(status_code=409, detail="Horário já ocupado")
@@ -1511,7 +1511,7 @@ def cancelar_consulta_admin(id_consulta: int, req_user=Depends(verificar_token_j
                 
             id_disp = res[0]
             
-            cur.execute("UPDATE consulta SET status = 'CANCELADA_CLINICA' WHERE id_consulta = %s", (id_consulta,))
+            cur.execute("UPDATE consulta SET status = 'CANCELADA' WHERE id_consulta = %s", (id_consulta,))
             cur.execute("UPDATE disponibilidade SET status = 'LIVRE' WHERE id_disponibilidade = %s", (id_disp,))
             conn.commit()
             
@@ -1573,7 +1573,7 @@ def get_stats_agenda_semana():
                     count(c.id_consulta) as total
                 FROM dates
                 LEFT JOIN disponibilidade d ON to_char(d.data_hora_inicio, 'YYYY-MM-DD') = to_char(dates.dia, 'YYYY-MM-DD')
-                LEFT JOIN consulta c ON c.id_disponibilidade = d.id_disponibilidade AND c.status NOT IN ('CANCELADA', 'CANCELADA_CLINICA')
+                LEFT JOIN consulta c ON c.id_disponibilidade = d.id_disponibilidade AND c.status NOT IN ('CANCELADA', 'CANCELADA')
                 GROUP BY dates.dia
                 ORDER BY dates.dia ASC
             """)
