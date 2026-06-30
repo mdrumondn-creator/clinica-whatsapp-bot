@@ -1283,6 +1283,73 @@ def resolver_atendimento(req: ResolveAtendimento, user=Depends(admin_auth)):
 
 
 # =========================================================
+
+# =========================================================
+# ENDPOINTS: USUÁRIOS
+# =========================================================
+@app.get("/api/admin/usuarios")
+def listar_usuarios(user=Depends(admin_auth)):
+    conn = db_pool.getconn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("SELECT id_usuario, nome, login, perfil, ativo, created_at FROM usuario ORDER BY id_usuario")
+            usuarios = cur.fetchall()
+            for u in usuarios:
+                if u.get("created_at"): u["created_at"] = u["created_at"].isoformat()
+        return {"usuarios": usuarios}
+    finally:
+        db_pool.putconn(conn)
+
+class NovoUsuario(BaseModel):
+    nome: str
+    login: str
+    senha: str
+    perfil: str = 'recepcao'
+
+@app.post("/api/admin/usuarios")
+def cadastrar_usuario(req: NovoUsuario, user=Depends(admin_auth)):
+    if user.get("perfil") != "admin":
+        raise HTTPException(status_code=403, detail="Apenas admins podem criar usuários")
+        
+    conn = db_pool.getconn()
+    try:
+        senha_hash = hashlib.sha256(req.senha.encode()).hexdigest()
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM usuario WHERE login = %s", (req.login,))
+            if cur.fetchone():
+                raise HTTPException(status_code=400, detail="Login já existe")
+                
+            cur.execute("""
+                INSERT INTO usuario (nome, login, senha_hash, perfil, ativo)
+                VALUES (%s, %s, %s, %s, TRUE)
+            """, (req.nome, req.login, senha_hash, req.perfil))
+            conn.commit()
+        return {"status": "success", "message": "Usuário criado"}
+    except psycopg2.IntegrityError:
+        conn.rollback()
+        raise HTTPException(status_code=400, detail="Login já existe")
+    finally:
+        db_pool.putconn(conn)
+
+class AlterarSenha(BaseModel):
+    id_usuario: int
+    nova_senha: str
+
+@app.post("/api/admin/usuarios/senha")
+def alterar_senha_usuario(req: AlterarSenha, user=Depends(admin_auth)):
+    if user.get("perfil") != "admin":
+        raise HTTPException(status_code=403, detail="Apenas admins podem alterar senhas")
+        
+    conn = db_pool.getconn()
+    try:
+        senha_hash = hashlib.sha256(req.nova_senha.encode()).hexdigest()
+        with conn.cursor() as cur:
+            cur.execute("UPDATE usuario SET senha_hash = %s WHERE id_usuario = %s", (senha_hash, req.id_usuario))
+            conn.commit()
+        return {"status": "success"}
+    finally:
+        db_pool.putconn(conn)
+
 # ENDPOINT: LISTAR CONSULTAS (com filtro de data)
 # =========================================================
 @app.get("/api/admin/consultas")
