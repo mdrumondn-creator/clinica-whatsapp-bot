@@ -610,9 +610,13 @@ def processar_fluxo(conn, telefone, mensagem, etapa_atual, contexto, config):
                 return "Para qual especialidade você deseja agendar?", "escolher_especialidade", especialidades
             return "Perfeito! Por favor, digite o ID do horário desejado:", "agendar"
         elif resp in ["2", "falar com recepção", "recepção", "falar com a recepção"]:
-            return "Certo, aguarde só um instante. Já vou chamar uma de nossas atendentes para falar com você! 👩‍⚕️", "fim"
+            return "Certo, aguarde só um instante. Já vou chamar uma de nossas atendentes para falar com você! 👩‍⚕️", "em_atendimento_humano"
         else:
             return "Ops, não entendi essa opção. Por favor, escolha 'Agendar consulta' ou 'Falar com recepção'.", "menu"
+
+    if etapa_atual == "em_atendimento_humano":
+        return "Você já está na fila de atendimento! ⏳\n\nPor favor, aguarde mais um instante, um de nossos assistentes humanos já vai falar com você.", "em_atendimento_humano"
+
 
     if etapa_atual == "escolher_especialidade":
         especialidade = (mensagem or '').strip()
@@ -1229,9 +1233,11 @@ def mensagens_pendentes(user=Depends(admin_auth)):
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute("""
                 SELECT wm.id_log, wm.telefone_remetente, wm.mensagem,
-                       wm.created_at, p.nome AS paciente_nome
+                       wm.created_at, p.nome AS paciente_nome,
+                       COALESCE(s.etapa, '') AS etapa_sessao
                 FROM whatsapp_mensagem wm
                 LEFT JOIN paciente p ON p.telefone = wm.telefone_remetente
+                LEFT JOIN sessao_chatbot s ON s.telefone = wm.telefone_remetente
                 WHERE wm.direcao = 'ENTRADA'
                 AND wm.created_at >= CURRENT_DATE
                 ORDER BY wm.created_at DESC
@@ -1253,6 +1259,26 @@ def mensagens_pendentes(user=Depends(admin_auth)):
             conn.rollback()
         except:
             pass
+        db_pool.putconn(conn)
+
+class ResolveAtendimento(BaseModel):
+    telefone: str
+
+@app.post("/api/admin/resolver-atendimento")
+def resolver_atendimento(req: ResolveAtendimento, user=Depends(admin_auth)):
+    conn = db_pool.getconn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                UPDATE sessao_chatbot 
+                SET etapa = 'inicio', updated_at = CURRENT_TIMESTAMP
+                WHERE telefone = %s
+            """, (req.telefone,))
+            if cur.rowcount == 0:
+                raise HTTPException(status_code=404, detail="Sessão não encontrada para o telefone")
+            conn.commit()
+        return {"status": "success", "message": "Atendimento resolvido, bot reiniciado."}
+    finally:
         db_pool.putconn(conn)
 
 
