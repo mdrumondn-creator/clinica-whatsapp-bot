@@ -1354,7 +1354,7 @@ def alterar_senha_usuario(req: AlterarSenha, user=Depends(admin_auth)):
 # ENDPOINT: LISTAR CONSULTAS (com filtro de data)
 # =========================================================
 @app.get("/api/admin/consultas")
-def get_consultas(data_inicio: Optional[str] = None, data_fim: Optional[str] = None, req_user=Depends(verificar_token_jwt)):
+def get_consultas(data_inicio: Optional[str] = None, data_fim: Optional[str] = None, user=Depends(admin_auth)):
     conn = db_pool.getconn()
     try:
         # Define janela de datas
@@ -1500,7 +1500,7 @@ def agendar_manual(req: AgendamentoManual, user=Depends(admin_auth)):
 # ENDPOINT: CANCELAR CONSULTA
 # =========================================================
 @app.put("/api/admin/consultas/{id_consulta}/cancelar")
-def cancelar_consulta_admin(id_consulta: int, req_user=Depends(verificar_token_jwt)):
+def cancelar_consulta_admin(id_consulta: int, user=Depends(admin_auth)):
     conn = db_pool.getconn()
     try:
         with conn.cursor() as cur:
@@ -1530,7 +1530,7 @@ def cancelar_consulta_admin(id_consulta: int, req_user=Depends(verificar_token_j
 # ENDPOINT: HISTÓRICO DO PACIENTE
 # =========================================================
 @app.get("/api/admin/pacientes/{id_paciente}/historico")
-def get_historico_paciente(id_paciente: int, req_user=Depends(verificar_token_jwt)):
+def get_historico_paciente(id_paciente: int, user=Depends(admin_auth)):
     conn = db_pool.getconn()
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
