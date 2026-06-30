@@ -1234,7 +1234,7 @@ def mensagens_pendentes(user=Depends(admin_auth)):
             cur.execute("""
                 SELECT wm.id_log, wm.telefone_remetente, wm.mensagem,
                        wm.created_at, p.nome AS paciente_nome,
-                       COALESCE(s.etapa, '') AS etapa_sessao
+                       COALESCE(s.contexto_json->>'etapa', '') AS etapa_sessao
                 FROM whatsapp_mensagem wm
                 LEFT JOIN paciente p ON p.telefone = wm.telefone_remetente
                 LEFT JOIN sessao_chatbot s ON s.telefone = wm.telefone_remetente
@@ -1271,7 +1271,8 @@ def resolver_atendimento(req: ResolveAtendimento, user=Depends(admin_auth)):
         with conn.cursor() as cur:
             cur.execute("""
                 UPDATE sessao_chatbot 
-                SET etapa = 'inicio', updated_at = CURRENT_TIMESTAMP
+                SET contexto_json = jsonb_set(COALESCE(contexto_json, '{}'::jsonb), '{etapa}', '"inicio"'), 
+                    updated_at = CURRENT_TIMESTAMP
                 WHERE telefone = %s
             """, (req.telefone,))
             if cur.rowcount == 0:
