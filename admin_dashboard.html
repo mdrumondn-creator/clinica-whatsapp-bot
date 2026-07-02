@@ -590,9 +590,22 @@
       background: currentColor;
       animation: pulse 1.5s ease-in-out infinite;
     }
-    @keyframes pulse {
-      0%, 100% { opacity: 1; transform: scale(1); }
-      50% { opacity: .5; transform: scale(.75); }
+    /* Estilos do Chat de Atendimento Humano */
+    .chat-list-item {
+      transition: background 0.2s;
+    }
+    .chat-list-item:hover {
+      background: var(--bg-input);
+    }
+    .chat-list-item.active {
+      background: rgba(14, 165, 233, 0.15) !important;
+      border-left: 4px solid var(--primary);
+    }
+    .chat-list-item.awaiting-human {
+      border-left: 4px solid var(--danger);
+    }
+    .chat-list-item.active.awaiting-human {
+      border-left: 4px solid var(--danger);
     }
   </style>
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
@@ -1164,15 +1177,78 @@
     </div>
 
     <!-- PAGE: MENSAGENS -->
-    <div class="page animate-in" id="page-mensagens">
-      <div class="card">
-        <div class="card-header">
-          <div class="card-title"><span class="material-symbols-rounded">chat</span> Mensagens Recebidas Hoje</div>
-          <button class="btn btn-ghost" onclick="loadMensagens()" style="font-size:.8rem;"><span class="material-symbols-rounded">refresh</span> Atualizar</button>
+    <div class="page animate-in" id="page-mensagens" style="height: calc(100vh - 120px); max-height: 800px; display: flex; flex-direction: column;">
+      <div class="card" style="flex: 1; display: flex; flex-direction: column; overflow: hidden; margin-bottom: 0;">
+        <div class="card-header" style="flex-shrink: 0;">
+          <div class="card-title"><span class="material-symbols-rounded">chat</span> Chat de Atendimento Humano</div>
+          <button class="btn btn-ghost" onclick="loadMensagens()" style="font-size:.8rem;"><span class="material-symbols-rounded">refresh</span> Atualizar Lista</button>
         </div>
-        <div id="msgs-container">
-          <div class="loading-row" style="text-align:center;padding:2rem;color:var(--text-3);">
-            <div class="spinner" style="margin:0 auto;"></div>
+        
+        <div style="flex: 1; display: flex; overflow: hidden; border-top: 1px solid var(--border);">
+          <!-- Painel Esquerdo: Lista de Pacientes em atendimento humano -->
+          <div style="width: 320px; border-right: 1px solid var(--border); display: flex; flex-direction: column; background: var(--bg-card);">
+            <div style="padding: 0.75rem; border-bottom: 1px solid var(--border);">
+              <input type="text" id="chat-search" placeholder="🔍 Buscar paciente..." style="width: 100%; padding: 0.4rem 0.75rem; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-input); color: var(--text-1);" oninput="filterChatList()" />
+            </div>
+            <div id="chats-list" style="flex: 1; overflow-y: auto; padding: 0.5rem 0;">
+              <!-- Lista de conversas injetadas dinamicamente -->
+            </div>
+          </div>
+          
+          <!-- Painel Direito: Janela de Conversa Ativa -->
+          <div style="flex: 1; display: flex; flex-direction: column; background: var(--bg-app);">
+            <!-- Cabeçalho do Chat -->
+            <div id="chat-header" style="padding: 1rem; border-bottom: 1px solid var(--border); background: var(--bg-card); display: flex; justify-content: space-between; align-items: center;">
+              <div>
+                <h3 id="chat-active-name" style="margin: 0; font-size: 1rem; color: var(--text-1);">Selecione um paciente</h3>
+                <span id="chat-active-phone" style="font-size: 0.8rem; color: var(--text-3);">Nenhuma conversa ativa</span>
+              </div>
+              <div id="chat-header-actions" style="display: none;">
+                <button class="btn btn-ghost" style="color: var(--badge-g-text); background: var(--badge-g-bg); border: 1px solid var(--badge-g-border); font-size: 0.8rem; padding: 0.4rem 0.75rem;" onclick="resolverAtendimentoAtivo()">
+                  ✅ Finalizar Atendimento (Voltar Bot)
+                </button>
+              </div>
+            </div>
+            
+            <!-- Histórico de Mensagens (Bolhas) -->
+            <div id="chat-messages" style="flex: 1; overflow-y: auto; padding: 1.5rem; display: flex; flex-direction: column; gap: 0.75rem;">
+              <div style="text-align: center; color: var(--text-3); margin-top: 5rem;">
+                <span class="material-symbols-rounded" style="font-size: 3rem; display: block; margin-bottom: 0.5rem;">chat_bubble_outline</span>
+                Selecione um paciente na lista para ver o histórico e responder
+              </div>
+            </div>
+            
+            <!-- Entrada de Mensagem e Upload -->
+            <div id="chat-input-area" style="padding: 1rem; border-top: 1px solid var(--border); background: var(--bg-card); display: none;">
+              <!-- Área de Preview de Arquivo Selecionado -->
+              <div id="file-preview-area" style="display: none; align-items: center; justify-content: space-between; padding: 0.5rem; margin-bottom: 0.75rem; background: var(--bg-app); border: 1px dashed var(--border); border-radius: 8px;">
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                  <span class="material-symbols-rounded" id="file-preview-icon" style="color: var(--primary);">description</span>
+                  <span id="file-preview-name" style="font-size: 0.85rem; font-weight: 500; color: var(--text-1);">arquivo.pdf</span>
+                  <span id="file-preview-size" style="font-size: 0.75rem; color: var(--text-3);">(1.2 MB)</span>
+                </div>
+                <button class="btn btn-ghost" style="padding: 0.2rem; color: var(--danger);" onclick="clearSelectedFile()">
+                  <span class="material-symbols-rounded">close</span>
+                </button>
+              </div>
+
+              <!-- Input e Botões -->
+              <div style="display: flex; gap: 0.75rem; align-items: center;">
+                <!-- Botão de Upload -->
+                <label for="chat-file-input" style="cursor: pointer; padding: 0.5rem; display: flex; align-items: center; justify-content: center; border-radius: 50%; color: var(--text-2); background: transparent;" title="Enviar Arquivo/Mídia">
+                  <span class="material-symbols-rounded" style="font-size: 1.5rem;">attach_file</span>
+                </label>
+                <input type="file" id="chat-file-input" style="display: none;" onchange="handleFileSelected(event)" />
+                
+                <!-- Input de texto -->
+                <input type="text" id="chat-text-input" placeholder="Digite uma resposta..." style="flex: 1; padding: 0.6rem 1rem; border: 1px solid var(--border); border-radius: 20px; background: var(--bg-input); color: var(--text-1);" onkeydown="if(event.key==='Enter') sendChatMessage()" />
+                
+                <!-- Botão Enviar -->
+                <button class="btn btn-primary" style="padding: 0.5rem 1rem; border-radius: 20px; display: flex; align-items: center; gap: 0.25rem;" onclick="sendChatMessage()">
+                  Enviar <span class="material-symbols-rounded" style="font-size: 1.1rem;">send</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1312,6 +1388,7 @@ async function doLogin() {
     document.getElementById('app').classList.add('show');
 
     await Promise.all([loadDashboard(), loadConfig(), loadMedicos(), loadAgenda(), loadConsultas(), loadMensagens(), loadConexao()]);
+    initWebSocket();
   } catch (e) {
     alert.className = 'alert error';
     alert.innerHTML = '<span class="material-symbols-rounded">cancel</span> ' + e.message;
@@ -2010,9 +2087,61 @@ async function cancelarConsulta(id_consulta) {
 
 // ===================== MENSAGENS =====================
 
+let activeChatPhone = '';
+let activeChatName = '';
+let selectedFileBase64 = '';
+let selectedFileName = '';
+let selectedFileType = '';
+let wsConn = null;
+
+function initWebSocket() {
+  if (wsConn) {
+    try { wsConn.close(); } catch(e) {}
+  }
+  
+  const loc = window.location;
+  let wsUrl = '';
+  if (loc.protocol === 'https:') {
+    wsUrl = 'wss://' + loc.host + '/api/admin/ws/chat';
+  } else {
+    wsUrl = 'ws://' + loc.host + '/api/admin/ws/chat';
+  }
+  
+  if (loc.protocol === 'file:') {
+    wsUrl = 'ws://localhost:8000/api/admin/ws/chat';
+  }
+
+  console.log('Iniciando conexao WebSocket em:', wsUrl);
+  wsConn = new WebSocket(wsUrl);
+  
+  wsConn.onmessage = function(event) {
+    try {
+      const data = JSON.parse(event.data);
+      console.log('Mensagem WebSocket recebida:', data);
+      if (data.event === 'new_message') {
+        if (currentPage === 'mensagens') {
+          loadMensagens();
+        } else {
+          toast('💬 Nova mensagem recebida!', 'success');
+        }
+      }
+    } catch(err) {
+      console.error('Erro ao processar dados do WebSocket:', err);
+    }
+  };
+  
+  wsConn.onclose = function() {
+    console.log('Conexao WebSocket fechada. Tentando reconectar em 5 segundos...');
+    setTimeout(initWebSocket, 5000);
+  };
+  
+  wsConn.onerror = function(err) {
+    console.error('Erro no WebSocket:', err);
+  };
+}
+
 async function resolverAtendimento(telefone) {
   try {
-    const al = document.getElementById('config-alert');
     await api('POST', '/api/admin/resolver-atendimento', { telefone });
     toast('Atendimento resolvido! Bot reiniciado.', 'success');
     loadMensagens();
@@ -2024,46 +2153,266 @@ async function resolverAtendimento(telefone) {
 async function loadMensagens() {
   try {
     const data = await api('GET', '/api/admin/mensagens-pendentes');
-    const container = document.getElementById('msgs-container');
+    const listContainer = document.getElementById('chats-list');
     
-    // Check for human handoff state
+    const patientChats = {};
+    data.mensagens.forEach(m => {
+      const phone = m.telefone_remetente;
+      if (!patientChats[phone]) {
+        patientChats[phone] = {
+          phone: phone,
+          name: m.paciente_nome || 'Paciente não identificado',
+          etapa: m.etapa_sessao,
+          lastMsg: m.mensagem || '[Mídia/Arquivo]',
+          time: m.created_at
+        };
+      }
+    });
+    
+    const chatsArray = Object.values(patientChats);
+    
     const humanAwaiting = data.mensagens.filter(m => m.etapa_sessao === 'em_atendimento_humano');
-    if (humanAwaiting.length > pendingHumanCount) {
-      toast('⚠️ Paciente aguardando atendimento manual!', 'error');
-      // Tenta tocar um som suave de notificação (o navegador pode bloquear se o usuário não tiver interagido com a página)
-      try {
-        const audio = new Audio('data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU'+'A'.repeat(50));
-        // audio.play(); // Descomente para ativar som (precisa de um base64 válido de beep)
-      } catch(e) {}
-    }
-    pendingHumanCount = humanAwaiting.length;
-    // Atualiza o contador no dashboard se ele estiver visível
     const statMsgs = document.getElementById('stat-msgs');
-    if(statMsgs) {
-       statMsgs.innerHTML = humanAwaiting.length > 0 ? `<span style="color:var(--danger)">${data.mensagens.length} (${humanAwaiting.length} pendentes)</span>` : data.mensagens.length;
+    if (statMsgs) {
+      statMsgs.innerHTML = humanAwaiting.length > 0 ? `<span style="color:var(--danger)">${data.mensagens.length} (${humanAwaiting.length} pendentes)</span>` : data.mensagens.length;
     }
-
-    if (data.mensagens.length === 0) {
-      container.innerHTML = `<div class="empty-state"><div class="icon"><span class="material-symbols-rounded">chat</span></div><p>Nenhuma mensagem recebida hoje</p></div>`;
-    } else {
-      container.innerHTML = data.mensagens.map(m => `
-        <div class="msg-card ${m.etapa_sessao === 'em_atendimento_humano' ? 'border-danger' : ''}" style="${m.etapa_sessao === 'em_atendimento_humano' ? 'border-left: 4px solid var(--danger);' : ''}">
-          <div class="msg-header">
-            <span class="msg-phone"><span class="material-symbols-rounded">smartphone</span> ${m.telefone_remetente}</span>
-            <span class="msg-time">
-              ${m.etapa_sessao === 'em_atendimento_humano' ? '<span class="badge red">AGUARDANDO HUMANO</span>' : ''}
-              ${fmtDatetime(m.created_at)}
-            </span>
+    
+    if (chatsArray.length === 0) {
+      listContainer.innerHTML = `<div style="text-align:center; padding:2rem; color:var(--text-3); font-size:0.85rem;">Nenhuma conversa ativa</div>`;
+      return;
+    }
+    
+    listContainer.innerHTML = chatsArray.map(c => {
+      const isSelected = c.phone === activeChatPhone;
+      const isAwaiting = c.etapa === 'em_atendimento_humano';
+      return `
+        <div class="chat-list-item ${isSelected ? 'active' : ''} ${isAwaiting ? 'awaiting-human' : ''}" 
+             style="padding:0.75rem 1rem; border-bottom:1px solid var(--border); cursor:pointer; display:flex; flex-direction:column; gap:0.25rem;"
+             onclick="selectChat('${c.phone}', '${c.name}')">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <strong style="font-size:0.9rem; color:var(--text-1);">${c.name}</strong>
+            <span style="font-size:0.75rem; color:var(--text-3);">${fmtTimeOnly(c.time)}</span>
           </div>
-          <div class="msg-name"><span class="material-symbols-rounded">person</span> ${m.paciente_nome || 'Paciente não identificado'}</div>
-          <div class="msg-text" style="margin-bottom: 0.5rem;">${m.mensagem || '<em style="color:var(--text-3)">mensagem vazia</em>'}</div>
-          ${m.etapa_sessao === 'em_atendimento_humano' ? `<button class="btn btn-primary" style="font-size: 0.75rem; padding: 0.3rem 0.6rem;" onclick="resolverAtendimento('${m.telefone_remetente}')">✅ Resolver Atendimento</button>` : ''}
+          <div style="display:flex; justify-content:space-between; align-items:center; gap: 0.5rem;">
+            <span style="font-size:0.8rem; color:var(--text-2); text-overflow:ellipsis; overflow:hidden; white-space:nowrap; max-width:200px;">${c.lastMsg}</span>
+            ${isAwaiting ? '<span class="badge red" style="font-size:0.65rem; padding:0.1rem 0.3rem; flex-shrink:0;">HUMANO</span>' : ''}
+          </div>
         </div>
-      `).join('');
+      `;
+    }).join('');
+    
+    if (activeChatPhone) {
+      loadChatHistory(activeChatPhone);
     }
   } catch (e) {
     console.error('Erro ao carregar mensagens:', e);
   }
+}
+
+function fmtTimeOnly(dtStr) {
+  if (!dtStr) return '';
+  const d = new Date(dtStr);
+  return d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+}
+
+async function selectChat(phone, name) {
+  activeChatPhone = phone;
+  activeChatName = name;
+  
+  document.getElementById('chat-active-name').innerText = name;
+  document.getElementById('chat-active-phone').innerText = phone;
+  document.getElementById('chat-header-actions').style.display = 'block';
+  document.getElementById('chat-input-area').style.display = 'block';
+  
+  document.querySelectorAll('.chat-list-item').forEach(el => {
+    el.classList.remove('active');
+    if (el.getAttribute('onclick').includes(phone)) {
+      el.classList.add('active');
+    }
+  });
+  
+  await loadChatHistory(phone);
+}
+
+async function loadChatHistory(phone) {
+  try {
+    const data = await api('GET', `/api/admin/mensagens/historico/${phone}`);
+    const msgContainer = document.getElementById('chat-messages');
+    
+    if (data.mensagens.length === 0) {
+      msgContainer.innerHTML = `<div style="text-align:center; color:var(--text-3); padding-top:2rem;">Nenhuma mensagem nesta conversa</div>`;
+      return;
+    }
+    
+    msgContainer.innerHTML = data.mensagens.map(m => {
+      const isOutbound = m.direcao === 'SAIDA';
+      const bubbleStyle = isOutbound 
+        ? 'align-self: flex-end; background: var(--primary); color: white; border-radius: 12px 12px 0px 12px;'
+        : 'align-self: flex-start; background: var(--bg-card); color: var(--text-1); border: 1px solid var(--border); border-radius: 12px 12px 12px 0px;';
+        
+      let contentHtml = '';
+      
+      if (m.tipo === 'image') {
+        contentHtml = `<img src="${m.mensagem}" style="max-width:250px; max-height: 250px; border-radius:8px; display:block; margin-bottom:0.25rem; cursor:pointer;" onclick="window.open('${m.mensagem}', '_blank')" />`;
+      } else if (m.tipo === 'document') {
+        const parts = m.mensagem.split('/');
+        const filename = parts[parts.length - 1];
+        contentHtml = `
+          <a href="${m.mensagem}" target="_blank" style="display:flex; align-items:center; gap:0.5rem; background:rgba(0,0,0,0.05); padding:0.5rem; border-radius:6px; margin-bottom:0.25rem; text-decoration:none; color:inherit;">
+            <span class="material-symbols-rounded">description</span>
+            <span style="font-size:0.85rem; font-weight:500; text-decoration:underline;">${filename}</span>
+          </a>
+        `;
+      } else if (m.tipo === 'audio') {
+        contentHtml = `
+          <audio controls src="${m.mensagem}" style="max-width:220px; display:block; margin-bottom:0.25rem;"></audio>
+        `;
+      } else if (m.tipo === 'video') {
+        contentHtml = `
+          <video controls src="${m.mensagem}" style="max-width:250px; max-height: 250px; border-radius:8px; display:block; margin-bottom:0.25rem;"></video>
+        `;
+      } else {
+        contentHtml = `<div>${m.mensagem || ''}</div>`;
+      }
+      
+      return `
+        <div style="max-width: 70%; padding: 0.6rem 0.9rem; font-size: 0.9rem; position: relative; display: flex; flex-direction: column; ${bubbleStyle}">
+          ${contentHtml}
+          <span style="font-size: 0.7rem; align-self: flex-end; margin-top: 0.25rem; opacity: 0.8; font-weight:300;">
+            ${fmtTimeOnly(m.created_at)}
+          </span>
+        </div>
+      `;
+    }).join('');
+    
+    msgContainer.scrollTop = msgContainer.scrollHeight;
+  } catch(e) {
+    console.error('Erro ao carregar histórico:', e);
+  }
+}
+
+async function handleFileSelected(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  
+  if (file.size > 5 * 1024 * 1024) {
+    toast('O arquivo deve ter no máximo 5MB.', 'error');
+    event.target.value = '';
+    return;
+  }
+  
+  const formData = new FormData();
+  formData.append('file', file);
+  
+  try {
+    toast('Enviando arquivo...', 'success');
+    
+    const response = await fetch('/api/admin/upload', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + authToken
+      },
+      body: formData
+    });
+    
+    if (!response.ok) {
+      throw new Error('Upload falhou');
+    }
+    
+    const resData = await response.json();
+    selectedFileBase64 = resData.url;
+    selectedFileName = file.name;
+    
+    const mime = file.type;
+    if (mime.startsWith('image/')) selectedFileType = 'image';
+    else if (mime.startsWith('video/')) selectedFileType = 'video';
+    else if (mime.startsWith('audio/')) selectedFileType = 'audio';
+    else selectedFileType = 'document';
+    
+    document.getElementById('file-preview-name').innerText = file.name;
+    document.getElementById('file-preview-size').innerText = `(${(file.size / (1024 * 1024)).toFixed(2)} MB)`;
+    
+    const iconEl = document.getElementById('file-preview-icon');
+    if (selectedFileType === 'image') iconEl.innerText = 'image';
+    else if (selectedFileType === 'video') iconEl.innerText = 'smart_display';
+    else if (selectedFileType === 'audio') iconEl.innerText = 'audiotrack';
+    else iconEl.innerText = 'description';
+    
+    document.getElementById('file-preview-area').style.display = 'flex';
+  } catch(e) {
+    toast('Erro no upload: ' + e.message, 'error');
+    clearSelectedFile();
+  }
+}
+
+function clearSelectedFile() {
+  selectedFileBase64 = '';
+  selectedFileName = '';
+  selectedFileType = '';
+  document.getElementById('chat-file-input').value = '';
+  document.getElementById('file-preview-area').style.display = 'none';
+}
+
+async function sendChatMessage() {
+  const textInput = document.getElementById('chat-text-input');
+  const text = textInput.value.trim();
+  
+  if (!text && !selectedFileBase64) return;
+  
+  try {
+    const payload = {
+      telefone: activeChatPhone,
+      mensagem: text || null,
+      arquivo_url: selectedFileBase64 || null,
+      arquivo_name: selectedFileName || null,
+      arquivo_tipo: selectedFileType || null
+    };
+    
+    await api('POST', '/api/admin/enviar-mensagem', payload);
+    textInput.value = '';
+    clearSelectedFile();
+    await loadChatHistory(activeChatPhone);
+  } catch(e) {
+    toast('Erro ao enviar mensagem: ' + e.message, 'error');
+  }
+}
+
+async function resolverAtendimentoAtivo() {
+  if (!activeChatPhone) return;
+  try {
+    await api('POST', '/api/admin/resolver-atendimento', { telefone: activeChatPhone });
+    toast('Atendimento resolvido! Bot reiniciado.', 'success');
+    
+    activeChatPhone = '';
+    activeChatName = '';
+    document.getElementById('chat-active-name').innerText = 'Selecione um paciente';
+    document.getElementById('chat-active-phone').innerText = 'Nenhuma conversa ativa';
+    document.getElementById('chat-header-actions').style.display = 'none';
+    document.getElementById('chat-input-area').style.display = 'none';
+    document.getElementById('chat-messages').innerHTML = `
+      <div style="text-align: center; color: var(--text-3); margin-top: 5rem;">
+        <span class="material-symbols-rounded" style="font-size: 3rem; display: block; margin-bottom: 0.5rem;">chat_bubble_outline</span>
+        Selecione um paciente na lista para ver o histórico e responder
+      </div>
+    `;
+    loadMensagens();
+  } catch(e) {
+    toast('Erro ao finalizar atendimento: ' + e.message, 'error');
+  }
+}
+
+function filterChatList() {
+  const query = document.getElementById('chat-search').value.toLowerCase();
+  const items = document.querySelectorAll('.chat-list-item');
+  items.forEach(el => {
+    const name = el.querySelector('strong').innerText.toLowerCase();
+    const phone = el.getAttribute('onclick').toLowerCase();
+    if (name.includes(query) || phone.includes(query)) {
+      el.style.display = 'flex';
+    } else {
+      el.style.display = 'none';
+    }
+  });
 }
 
 // ===================== AUTO-REFRESH =====================
@@ -2084,6 +2433,7 @@ setInterval(() => {
     document.getElementById('login-screen').classList.add('hide');
     document.getElementById('app').classList.add('show');
     await Promise.all([loadDashboard(), loadConfig(), loadMedicos(), loadAgenda(), loadConsultas(), loadMensagens(), loadConexao()]);
+    initWebSocket();
   } catch(e) {
     // Se falhar, exibe a tela de login normalmente
     console.warn('Auto-login falhou, exibindo tela de login.', e);

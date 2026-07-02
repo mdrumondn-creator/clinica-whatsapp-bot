@@ -1,6 +1,7 @@
-from fastapi import FastAPI, HTTPException, Depends, Header, Body
+from fastapi import FastAPI, HTTPException, Depends, Header, Body, WebSocket, WebSocketDisconnect, UploadFile, File
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from psycopg2 import pool
 import psycopg2.extras
@@ -13,6 +14,7 @@ import hmac
 import time
 import base64
 import re
+import shutil
 import requests
 import bcrypt
 from typing import Optional, List
@@ -28,6 +30,36 @@ EVOLUTION_API_URL = os.getenv("EVOLUTION_API_URL", "http://evolution-api:8080")
 EVOLUTION_API_KEY = os.getenv("EVOLUTION_API_KEY")
 
 app = FastAPI()
+
+# Criar pasta fisica para uploads se nao existir
+os.makedirs("static/uploads", exist_ok=True)
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# Gerenciador de Conexões WebSocket
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+        logger.info(f"WebSocket conectado. Total de conexoes ativas: {len(self.active_connections)}")
+
+    def disconnect(self, websocket: WebSocket):
+        if websocket in self.active_connections:
+            self.active_connections.remove(websocket)
+        logger.info(f"WebSocket desconectado. Total de conexoes ativas: {len(self.active_connections)}")
+
+    async def broadcast(self, message: dict):
+        logger.info(f"Transmitindo sinal WebSocket para {len(self.active_connections)} conexoes...")
+        for connection in self.active_connections:
+            try:
+                await connection.send_json(message)
+            except Exception as e:
+                logger.error(f"Erro ao enviar sinal WebSocket: {e}")
+
+ws_manager = ConnectionManager()
+
 
 # =========================================================
 # SCHEDULER: LEMBRETES AUTOMÁTICOS
@@ -264,6 +296,8 @@ class Mensagem(BaseModel):
     mensagem: str
     api_message_id: str
     direcao: Optional[str] = None
+    tipo: Optional[str] = 'text'
+
 
 
 # =========================================================
@@ -320,6 +354,14 @@ class AgendamentoManual(BaseModel):
     cpf: Optional[str] = None
     telefone: Optional[str] = None
     nome_paciente: Optional[str] = None
+
+class EnviarMensagemRequest(BaseModel):
+    telefone: str
+    mensagem: Optional[str] = None
+    arquivo_url: Optional[str] = None
+    arquivo_nome: Optional[str] = None
+    arquivo_tipo: Optional[str] = None
+
 
 
 # =========================================================
@@ -543,10 +585,11 @@ def salvar_mensagem(conn, dados):
                     telefone_remetente,
                     mensagem,
                     direcao,
-                    api_message_id
+                    api_message_id,
+                    tipo
                 )
-                VALUES (%s, %s, %s, %s)
-            """, (dados.telefone, dados.mensagem, direcao, dados.api_message_id))
+                VALUES (%s, %s, %s, %s, %s)
+            """, (dados.telefone, dados.mensagem, direcao, dados.api_message_id, dados.tipo or 'text'))
         conn.commit()
         return True
     except psycopg2.IntegrityError:
@@ -768,6 +811,104 @@ def enviar_mensagem_whatsapp(telefone: str, texto: str, botoes: list = None):
     except Exception as e:
         logger.error(f"Exceção ao enviar mensagem via Evolution API: {e}")
 
+def enviar_midia_whatsapp(telefone: str, media_url: str, media_type: str, file_name: str, caption: Optional[str] = None):
+    api_url = os.getenv("EVOLUTION_API_URL", "http://evolution-api:8080")
+    api_key = os.getenv("EVOLUTION_API_KEY")
+    if not api_key:
+        logger.error("EVOLUTION_API_KEY não definida — mídia não enviada.")
+        return False
+    instance = "bot"
+    
+    headers = {
+        "apikey": api_key,
+        "Content-Type": "application/json"
+    }
+    
+    if media_url.startswith("/"):
+        media_url_completa = f"http://clinica-bot-python:8000{media_url}"
+    else:
+        media_url_completa = media_url
+
+    payload = {
+        "number": telefone,
+        "media": media_url_completa,
+        "mediaType": media_type,
+        "fileName": file_name
+    }
+    if caption:
+        payload["caption"] = caption
+        
+    try:
+        url = f"{api_url}/message/sendMedia/{instance}"
+        logger.info(f"Enviando mídia ({media_type}) para {telefone} via Evolution API: {media_url_completa}")
+        res = requests.post(url, json=payload, headers=headers, timeout=20)
+        if res.status_code not in (200, 201):
+            logger.error(f"Erro ao enviar mídia via Evolution API: {res.status_code} - {res.text}")
+            return False
+        logger.info(f"Mídia enviada com sucesso para {telefone}")
+        return True
+    except Exception as e:
+        logger.error(f"Exceção ao enviar mídia via Evolution API: {e}")
+        return False
+
+def baixar_midia_webhook(message_id: str, media_type: str) -> Optional[str]:
+    api_url = os.getenv("EVOLUTION_API_URL", "http://evolution-api:8080")
+    api_key = os.getenv("EVOLUTION_API_KEY")
+    if not api_key:
+        logger.error("EVOLUTION_API_KEY nao definida para download de midia.")
+        return None
+    instance = "bot"
+    
+    headers = {
+        "apikey": api_key,
+        "Content-Type": "application/json"
+    }
+    
+    payload = {
+        "messageId": message_id,
+        "convertToMp4": True
+    }
+    
+    try:
+        url = f"{api_url}/message/downloadMedia/{instance}"
+        logger.info(f"Baixando midia ({media_type}) do WhatsApp msg={message_id}...")
+        res = requests.post(url, json=payload, headers=headers, timeout=20)
+        if res.status_code == 200:
+            data = res.json()
+            base64_data = data.get("base64")
+            if not base64_data:
+                logger.error("Nenhum dado base64 retornado da Evolution API no download de midia.")
+                return None
+                
+            if "," in base64_data:
+                header, base64_str = base64_data.split(",", 1)
+            else:
+                base64_str = base64_data
+                
+            file_bytes = base64.b64decode(base64_str)
+            nome_original = data.get("fileName") or "arquivo"
+            ext = os.path.splitext(nome_original)[1]
+            if not ext:
+                if media_type == 'image': ext = '.jpg'
+                elif media_type == 'audio': ext = '.mp3'
+                elif media_type == 'video': ext = '.mp4'
+                else: ext = '.bin'
+                
+            nome_unico = f"incoming_{message_id}{ext}"
+            caminho_salvar = os.path.join("static", "uploads", nome_unico)
+            
+            with open(caminho_salvar, "wb") as f:
+                f.write(file_bytes)
+                
+            logger.info(f"Midia de entrada salva em: {caminho_salvar}")
+            return f"/static/uploads/{nome_unico}"
+        else:
+            logger.error(f"Erro ao baixar midia da Evolution API: {res.status_code} - {res.text}")
+            return None
+    except Exception as e:
+        logger.error(f"Excecao ao baixar midia da Evolution API: {e}")
+        return None
+
 @app.post("/webhook")
 @app.post("/webhook/{path:path}")
 def webhook(payload: dict = Body(...)):
@@ -801,21 +942,45 @@ def webhook(payload: dict = Body(...)):
         if not message_data:
             return {"status": "empty_message"}
             
-        mensagem = (
-            message_data.get("conversation") or 
-            message_data.get("extendedTextMessage", {}).get("text") or 
-            message_data.get("imageMessage", {}).get("caption") or 
-            message_data.get("videoMessage", {}).get("caption") or 
-            ""
-        )
+        tipo_mensagem = "text"
+        mensagem = ""
         api_message_id = key.get("id", f"evo-{uuid.uuid4().hex}")
+        
+        if "conversation" in message_data:
+            mensagem = message_data.get("conversation")
+            tipo_mensagem = "text"
+        elif "extendedTextMessage" in message_data:
+            mensagem = message_data.get("extendedTextMessage", {}).get("text")
+            tipo_mensagem = "text"
+        elif "imageMessage" in message_data:
+            mensagem = message_data.get("imageMessage", {}).get("caption") or "Imagem"
+            tipo_mensagem = "image"
+        elif "documentMessage" in message_data:
+            mensagem = message_data.get("documentMessage", {}).get("title") or "Documento"
+            tipo_mensagem = "document"
+        elif "audioMessage" in message_data:
+            mensagem = "Áudio"
+            tipo_mensagem = "audio"
+        elif "videoMessage" in message_data:
+            mensagem = message_data.get("videoMessage", {}).get("caption") or "Vídeo"
+            tipo_mensagem = "video"
+        else:
+            mensagem = ""
+            tipo_mensagem = "text"
+            
+        if tipo_mensagem in ("image", "document", "audio", "video"):
+            caminho_local = baixar_midia_webhook(api_message_id, tipo_mensagem)
+            if caminho_local:
+                mensagem = caminho_local
+                
         direcao = 'SAIDA' if from_me else 'ENTRADA'
         
         msg = Mensagem(
             telefone=telefone,
             mensagem=mensagem,
             api_message_id=api_message_id,
-            direcao=direcao
+            direcao=direcao,
+            tipo=tipo_mensagem
         )
     else:
         try:
@@ -829,6 +994,14 @@ def webhook(payload: dict = Body(...)):
         # Salva a mensagem recebida
         if not salvar_mensagem(conn, msg):
             return {"status": "already_processed_or_error"}
+
+        # Dispara sinal de nova mensagem via WebSocket para o painel em tempo real
+        import asyncio
+        try:
+            loop = asyncio.get_event_loop()
+            loop.create_task(ws_manager.broadcast({"event": "new_message", "telefone": msg.telefone}))
+        except Exception as ws_err:
+            logger.error(f"Erro ao disparar broadcast WebSocket no webhook: {ws_err}")
 
         # Filtro de segurança: ignora mensagens de saída
         if msg.direcao and msg.direcao.upper() in ('SAIDA', 'OUTBOUND', 'OUTGOING', 'SENT'):
@@ -1480,6 +1653,114 @@ def resolver_atendimento(req: ResolveAtendimento, user=Depends(admin_auth)):
         return {"status": "success", "message": "Atendimento resolvido, bot reiniciado."}
     finally:
         db_pool.putconn(conn)
+
+@app.post("/api/admin/upload")
+def upload_arquivo_chat(file: UploadFile = File(...), user=Depends(admin_auth)):
+    try:
+        ext = os.path.splitext(file.filename)[1]
+        nome_unico = f"{uuid.uuid4().hex}{ext}"
+        caminho_salvar = os.path.join("static", "uploads", nome_unico)
+        
+        with open(caminho_salvar, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+            
+        url_relativa = f"/static/uploads/{nome_unico}"
+        return {"url": url_relativa, "nome": file.filename}
+    except Exception as e:
+        logger.error(f"Erro ao salvar upload de mídia: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/admin/mensagens/historico/{telefone}")
+def get_chat_history(telefone: str, user=Depends(admin_auth)):
+    conn = db_pool.getconn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT id_log, telefone_remetente, mensagem, direcao,
+                       status_envio, created_at, tipo
+                FROM whatsapp_mensagem
+                WHERE telefone_remetente = %s
+                ORDER BY created_at ASC
+                LIMIT 200
+            """, (telefone,))
+            msgs = cur.fetchall()
+        for m in msgs:
+            if m.get("created_at"):
+                m["created_at"] = m["created_at"].isoformat()
+        return {"mensagens": msgs}
+    except Exception as e:
+        logger.error(f"Erro ao buscar historico: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db_pool.putconn(conn)
+
+@app.post("/api/admin/enviar-mensagem")
+def enviar_mensagem_atendente(req: EnviarMensagemRequest, user=Depends(admin_auth)):
+    conn = db_pool.getconn()
+    try:
+        sucesso = False
+        if req.arquivo_url:
+            sucesso = enviar_midia_whatsapp(
+                telefone=req.telefone,
+                media_url=req.arquivo_url,
+                media_type=req.arquivo_tipo or "document",
+                file_name=req.arquivo_nome or "arquivo",
+                caption=req.mensagem
+            )
+            msg_salvar = req.arquivo_nome or "[Arquivo]"
+            if req.mensagem:
+                msg_salvar += f" - {req.mensagem}"
+            msg_tipo = req.arquivo_tipo or "document"
+        else:
+            enviar_mensagem_whatsapp(req.telefone, req.mensagem)
+            sucesso = True
+            msg_salvar = req.mensagem
+            msg_tipo = "text"
+
+        if not sucesso:
+            raise HTTPException(status_code=500, detail="Erro ao enviar mensagem via Evolution API")
+
+        paciente_id = get_paciente(conn, req.telefone)
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO whatsapp_mensagem (
+                    telefone_remetente,
+                    id_paciente,
+                    mensagem,
+                    direcao,
+                    api_message_id,
+                    status_envio,
+                    tipo
+                )
+                VALUES (%s, %s, %s, 'SAIDA', %s, 'ENVIADO', %s)
+            """, (req.telefone, paciente_id, msg_salvar, f"srv-man-{uuid.uuid4().hex}", msg_tipo))
+            conn.commit()
+
+        # Avisa aos WebSockets conectados para atualizarem a tela
+        import asyncio
+        loop = asyncio.get_event_loop()
+        loop.create_task(ws_manager.broadcast({"event": "new_message", "telefone": req.telefone}))
+
+        return {"status": "success"}
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Erro ao enviar mensagem manual: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db_pool.putconn(conn)
+
+@app.websocket("/api/admin/ws/chat")
+async def websocket_chat_endpoint(websocket: WebSocket):
+    await ws_manager.connect(websocket)
+    try:
+        while True:
+            data = await websocket.receive_text()
+    except WebSocketDisconnect:
+        ws_manager.disconnect(websocket)
+    except Exception as e:
+        logger.error(f"Erro na conexao WebSocket: {e}")
+        ws_manager.disconnect(websocket)
+
 
 @app.get("/api/admin/stats/agenda-semana")
 def get_stats_agenda_semana(user=Depends(admin_auth)):
