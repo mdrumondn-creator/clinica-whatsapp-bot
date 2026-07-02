@@ -1,3 +1,26 @@
 node_modules/
+
+# Auth WhatsApp (sessão local — nunca commitar)
 .wwebjs_auth/
 whatsapp_qr.png
+
+# Cache WhatsApp web
+.wwebjs_cache/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Variáveis de ambiente (NUNCA commitar o .env real)
+.env
+
+# Aider AI IDE (histórico de desenvolvimento)
+.aider.chat.history.md
+.aider.input.history
+.aider.tags.cache.v4/
+
+# VS Code
+.vscode/launch.json

@@ -14,9 +14,7 @@ import time
 import base64
 import re
 import requests
-import os
-EVOLUTION_API_URL = os.getenv("EVOLUTION_API_URL", "http://evolution-api:8080")
-EVOLUTION_API_KEY = os.getenv("EVOLUTION_API_KEY", "sua_api_key_super_secreta")
+import bcrypt
 from typing import Optional, List
 from datetime import datetime, time as dt_time, timedelta
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -25,6 +23,9 @@ from apscheduler.triggers.cron import CronTrigger
 # Configuração de Log
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+EVOLUTION_API_URL = os.getenv("EVOLUTION_API_URL", "http://evolution-api:8080")
+EVOLUTION_API_KEY = os.getenv("EVOLUTION_API_KEY")
 
 app = FastAPI()
 
@@ -152,20 +153,30 @@ def serve_dashboard():
     return FileResponse("admin_dashboard.html")
 
 # =========================================================
-# CORS (permite o painel admin acessar a API)
+# CORS
+# SEGURANÇA: allow_credentials=False — JWT vai em header Authorization,
+# não em cookie. Manter allow_origins=["*"] durante fase de testes.
+# Em produção, restringir para o domínio real.
 # =========================================================
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # =========================================================
-# CONFIGURAÇÃO JWT SIMPLES (sem dependência externa)
+# CONFIGURAÇÃO JWT
+# SEGURANÇA: JWT_SECRET obrigatório — sem fallback fraco.
+# Se não definido, o app falha no startup (fail-fast).
 # =========================================================
-JWT_SECRET = os.getenv("JWT_SECRET", "clinica-bot-secret-change-me")
+JWT_SECRET = os.getenv("JWT_SECRET")
+if not JWT_SECRET:
+    raise RuntimeError(
+        "❌ JWT_SECRET não definido! Configure a variável de ambiente antes de iniciar. "
+        "Exemplo: export JWT_SECRET=$(openssl rand -hex 32)"
+    )
 JWT_EXPIRATION_SECONDS = 28800  # 8 horas
 
 def _b64url_encode(data: bytes) -> str:
@@ -242,10 +253,6 @@ def get_db_connection():
             conn.rollback()
         except:
             pass
-        try:
-            conn.rollback()
-        except:
-            pass
         db_pool.putconn(conn)
 
 
@@ -292,6 +299,80 @@ class NovoMedico(BaseModel):
     email: Optional[str] = None
     tempo_padrao_minutos: Optional[int] = 30
 
+class NovoUsuario(BaseModel):
+    nome: str
+    login: str
+    senha: str
+    perfil: str = 'recepcao'
+
+class AlterarSenha(BaseModel):
+    id_usuario: int
+    nova_senha: str
+
+class FotoMedico(BaseModel):
+    foto_base64: str
+
+class ResolveAtendimento(BaseModel):
+    telefone: str
+
+class AgendamentoManual(BaseModel):
+    id_disponibilidade: int
+    cpf: Optional[str] = None
+    telefone: Optional[str] = None
+    nome_paciente: Optional[str] = None
+
+
+# =========================================================
+# UTIL: VALIDAR FORÇA DE SENHA
+# Política: mínimo 6 caracteres e pelo menos 1 número.
+# =========================================================
+def validar_forca_senha(senha: str):
+    if len(senha) < 6:
+        raise HTTPException(
+            status_code=400,
+            detail="Senha deve ter pelo menos 6 caracteres."
+        )
+    if not any(c.isdigit() for c in senha):
+        raise HTTPException(
+            status_code=400,
+            detail="Senha deve conter pelo menos um número."
+        )
+
+
+# =========================================================
+# UTIL: VERIFICAR / GERAR HASH DE SENHA (bcrypt)
+# Suporte a migração lazy: hashes SHA-256 legados são aceitos
+# e migrados para bcrypt automaticamente no login.
+# =========================================================
+def _verificar_e_migrar_senha(senha_digitada: str, hash_armazenado: str, id_usuario: int, conn) -> bool:
+    """
+    Verifica a senha. Se o hash for SHA-256 legado (64 hex chars),
+    verifica e migra para bcrypt silenciosamente.
+    """
+    # Detecta formato: bcrypt começa com $2b$ ou $2a$
+    if hash_armazenado.startswith("$2"):
+        # Hash bcrypt — verificação direta
+        return bcrypt.checkpw(senha_digitada.encode(), hash_armazenado.encode())
+    else:
+        # Hash SHA-256 legado — verificação e migração
+        sha_hash = hashlib.sha256(senha_digitada.encode()).hexdigest()
+        if not hmac.compare_digest(hash_armazenado, sha_hash):
+            return False
+        # Migra para bcrypt
+        novo_hash = bcrypt.hashpw(senha_digitada.encode(), bcrypt.gensalt()).decode()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE usuario SET senha_hash = %s WHERE id_usuario = %s",
+                    (novo_hash, id_usuario)
+                )
+                conn.commit()
+            logger.info(f"Senha do usuário id={id_usuario} migrada de SHA-256 para bcrypt.")
+        except Exception as e:
+            conn.rollback()
+            logger.error(f"Falha ao migrar hash de senha: {e}")
+        return True
+
 
 # =========================================================
 # UTIL: VERIFICAR HORÁRIO DE FUNCIONAMENTO
@@ -313,7 +394,9 @@ def bot_esta_operacional(conn) -> tuple:
     if not config["bot_ativo"]:
         return False, dict(config)
 
-    agora = datetime.now().time()
+    from zoneinfo import ZoneInfo
+    sp_tz = ZoneInfo("America/Sao_Paulo")
+    agora = datetime.now(sp_tz).time()
     inicio = config["bot_inicio_funcionamento"]
     fim = config["bot_fim_funcionamento"]
 
@@ -358,19 +441,19 @@ def get_or_create_session(conn, telefone):
             contexto = sessao[1] if sessao[1] else {}
             etapa = contexto.get("etapa", "inicio")
             
-            # Timeout logic: if inactive for 15+ mins and in the main flow, reset to 'inicio'
+            # Timeout: se inativo por 15+ min, reseta para 'inicio'
             updated_at = sessao[2]
             if updated_at:
                 now_utc = datetime.now(updated_at.tzinfo) if updated_at.tzinfo else datetime.now()
                 diff = now_utc - updated_at
-                if diff.total_seconds() > 900:  # 15 minutes
+                if diff.total_seconds() > 900:  # 15 minutos
                     if etapa in ["menu", "escolher_especialidade", "agendar", "fim", "inicio"]:
                         etapa = "inicio"
                         contexto["etapa"] = "inicio"
             
             return id_sessao, etapa, contexto
 
-        # Só crie sessão se o telefone estiver cadastrado como paciente
+        # Só cria sessão se o telefone estiver cadastrado como paciente
         cur.execute("""
             SELECT id_paciente FROM paciente WHERE telefone = %s LIMIT 1
         """, (telefone,))
@@ -529,9 +612,9 @@ def processar_fluxo(conn, telefone, mensagem, etapa_atual, contexto, config):
     if etapa_atual == "validar_lgpd":
         resp = str(mensagem).strip().lower()
         if resp in ["1", "concordo"]:
-            return config.get('msg_solicitar_cpf', "Excelente! 👍\nPor favor, digite apenas os números do seu *CPF* ou *carteirinha* do convênio:"), "pedir_cpf"
+            return config.get('msg_solicitar_cpf', "Excelente! 🙌\nPor favor, digite apenas os números do seu *CPF* ou *carteirinha* do convênio:"), "pedir_cpf"
         elif resp in ["2", "não concordo", "nao concordo"]:
-            return config.get('msg_despedida_lgpd', "Compreendemos a sua escolha. Como precisamos dos dados para o agendamento, o atendimento foi encerrado.\n\nSempre que precisar, estaremos à disposição! 👋"), "fim"
+            return config.get('msg_despedida_lgpd', "Compreendemos a sua escolha. Como precisamos dos dados para o agendamento, o atendimento foi encerrado.\n\nSempre que precisar, estaremos à disposição! 🙏"), "fim"
         else:
             return "Por favor, responda com Concordo ou Não Concordo.", "validar_lgpd"
 
@@ -549,7 +632,7 @@ def processar_fluxo(conn, telefone, mensagem, etapa_atual, contexto, config):
 
         if not p:
             contexto["cpf_temp"] = digits
-            return config.get('msg_solicitar_nome', "Vi que é seu primeiro acesso por aqui! 🎉\nPara completarmos o seu cadastro, digite o seu *Nome Completo*, por favor:"), "pedir_nome"
+            return config.get('msg_solicitar_nome', "Vi que é seu primeiro acesso por aqui! 🙏\nPara completarmos o seu cadastro, digite o seu *Nome Completo*, por favor:"), "pedir_nome"
 
         id_paciente = p[0]
         with conn.cursor() as cur:
@@ -610,7 +693,7 @@ def processar_fluxo(conn, telefone, mensagem, etapa_atual, contexto, config):
                 return "Para qual especialidade você deseja agendar?", "escolher_especialidade", especialidades
             return "Perfeito! Por favor, digite o ID do horário desejado:", "agendar"
         elif resp in ["2", "falar com recepção", "recepção", "falar com a recepção"]:
-            return "Certo, aguarde só um instante. Já vou chamar uma de nossas atendentes para falar com você! 👩‍⚕️", "em_atendimento_humano"
+            return "Certo, aguarde só um instante. Já vou chamar uma de nossas atendentes para falar com você! 🙋‍♀️", "em_atendimento_humano"
         else:
             return "Ops, não entendi essa opção. Por favor, escolha 'Agendar consulta' ou 'Falar com recepção'.", "menu"
 
@@ -634,7 +717,7 @@ def processar_fluxo(conn, telefone, mensagem, etapa_atual, contexto, config):
         except ValueError:
             return "Por favor, digite apenas números válidos do horário.", "agendar"
 
-    return "Seu atendimento foi finalizado. Qualquer coisa é só chamar! 👋", "fim"
+    return "Seu atendimento foi finalizado. Qualquer coisa é só chamar! 🙏", "fim"
 
 
 # =========================================================
@@ -655,7 +738,10 @@ MSG_BOT_DESATIVADO = (
 
 def enviar_mensagem_whatsapp(telefone: str, texto: str, botoes: list = None):
     api_url = os.getenv("EVOLUTION_API_URL", "http://evolution-api:8080")
-    api_key = os.getenv("EVOLUTION_API_KEY", "apikey_secreta_evolution")
+    api_key = os.getenv("EVOLUTION_API_KEY")
+    if not api_key:
+        logger.error("EVOLUTION_API_KEY não definida — mensagem não enviada.")
+        return
     instance = "bot"
     
     headers = {
@@ -744,7 +830,7 @@ def webhook(payload: dict = Body(...)):
         if not salvar_mensagem(conn, msg):
             return {"status": "already_processed_or_error"}
 
-        # Filtro de segurança: ignorar mensagens de saída
+        # Filtro de segurança: ignora mensagens de saída
         if msg.direcao and msg.direcao.upper() in ('SAIDA', 'OUTBOUND', 'OUTGOING', 'SENT'):
             logger.info(f"Ignorando mensagem de saída: {msg.api_message_id} ({msg.direcao})")
             return {"status": "ignored_outbound"}
@@ -754,9 +840,9 @@ def webhook(payload: dict = Body(...)):
             logger.warning("Envio de mensagens está desabilitado por kill-switch (ALLOW_SEND!=true)")
             return {"status": "sending_disabled"}
 
-        # =============================================
+        # =========================================================
         # VERIFICAÇÃO DE HORÁRIO DE FUNCIONAMENTO
-        # =============================================
+        # =========================================================
         operacional, config = bot_esta_operacional(conn)
         if not operacional:
             if not config.get("bot_ativo", True):
@@ -777,9 +863,9 @@ def webhook(payload: dict = Body(...)):
             
             return {"resposta": resposta_fora, "botoes": [], "status": "fora_horario"}
 
-        # =============================================
+        # =========================================================
         # FLUXO NORMAL DO BOT
-        # =============================================
+        # =========================================================
         sessao_id, etapa_atual, contexto = get_or_create_session(conn, msg.telefone)
 
         if not sessao_id:
@@ -840,10 +926,6 @@ def webhook(payload: dict = Body(...)):
             conn.rollback()
         except:
             pass
-        try:
-            conn.rollback()
-        except:
-            pass
         db_pool.putconn(conn)
 
 
@@ -866,10 +948,8 @@ def admin_login(req: LoginRequest):
         if not user:
             raise HTTPException(status_code=401, detail="Credenciais inválidas")
 
-        # Verificação de senha usando SHA-256 simples
-        # Em produção, usar bcrypt (passlib)
-        senha_hash = hashlib.sha256(req.senha.encode()).hexdigest()
-        if not hmac.compare_digest(user["senha_hash"], senha_hash):
+        # Verificação com suporte a migração lazy SHA-256 → bcrypt
+        if not _verificar_e_migrar_senha(req.senha, user["senha_hash"], user["id_usuario"], conn):
             raise HTTPException(status_code=401, detail="Credenciais inválidas")
 
         token = criar_token_jwt({
@@ -891,196 +971,97 @@ def admin_login(req: LoginRequest):
             conn.rollback()
         except:
             pass
-        try:
-            conn.rollback()
-        except:
-            pass
         db_pool.putconn(conn)
 
 
 # =========================================================
-# ENDPOINT: OBTER CONFIGURAÇÕES
+# ENDPOINTS: CONFIGURAÇÃO
 # =========================================================
 @app.get("/api/admin/config")
-def get_config(user=Depends(admin_auth)):
+def obter_config(user=Depends(admin_auth)):
     conn = db_pool.getconn()
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute("SELECT * FROM configuracao_sistema ORDER BY id_config LIMIT 1")
             config = cur.fetchone()
         if not config:
-            raise HTTPException(status_code=404, detail="Configuração não encontrada")
-
-        # Converte objetos time para strings serializáveis
-        result = dict(config)
-        for key in ["bot_inicio_funcionamento", "bot_fim_funcionamento"]:
-            if result.get(key) and hasattr(result[key], "isoformat"):
-                result[key] = result[key].isoformat()[:5]
-        if result.get("updated_at"):
-            result["updated_at"] = result["updated_at"].isoformat()
-
-        return result
+            return {}
+        config_dict = dict(config)
+        for key in ['bot_inicio_funcionamento', 'bot_fim_funcionamento']:
+            if config_dict.get(key) is not None:
+                config_dict[key] = str(config_dict[key])[:5]
+        return config_dict
     finally:
-        try:
-            conn.rollback()
-        except:
-            pass
-        try:
-            conn.rollback()
-        except:
-            pass
         db_pool.putconn(conn)
 
-
-# =========================================================
-# ENDPOINT: ATUALIZAR CONFIGURAÇÕES
-# =========================================================
 @app.put("/api/admin/config")
-def update_config(req: ConfigUpdate, user=Depends(admin_auth)):
+def atualizar_config(req: ConfigUpdate, user=Depends(admin_auth)):
     conn = db_pool.getconn()
     try:
-        updates = []
-        params = []
-
-        if req.bot_ativo is not None:
-            updates.append("bot_ativo = %s")
-            params.append(req.bot_ativo)
-        if req.bot_inicio_funcionamento is not None:
-            updates.append("bot_inicio_funcionamento = %s")
-            params.append(req.bot_inicio_funcionamento)
-        if req.bot_fim_funcionamento is not None:
-            updates.append("bot_fim_funcionamento = %s")
-            params.append(req.bot_fim_funcionamento)
-        if req.tempo_padrao_consulta_minutos is not None:
-            updates.append("tempo_padrao_consulta_minutos = %s")
-            params.append(req.tempo_padrao_consulta_minutos)
-        
-        if req.msg_saudacao is not None:
-            updates.append("msg_saudacao = %s")
-            params.append(req.msg_saudacao)
-        if req.msg_solicitar_cpf is not None:
-            updates.append("msg_solicitar_cpf = %s")
-            params.append(req.msg_solicitar_cpf)
-        if req.msg_despedida_lgpd is not None:
-            updates.append("msg_despedida_lgpd = %s")
-            params.append(req.msg_despedida_lgpd)
-        if req.msg_solicitar_nome is not None:
-            updates.append("msg_solicitar_nome = %s")
-            params.append(req.msg_solicitar_nome)
-        if req.msg_fora_horario is not None:
-            updates.append("msg_fora_horario = %s")
-            params.append(req.msg_fora_horario)
-        if req.msg_lembrete_24h is not None:
-            updates.append("msg_lembrete_24h = %s")
-            params.append(req.msg_lembrete_24h)
-        if req.msg_lembrete_dia is not None:
-            updates.append("msg_lembrete_dia = %s")
-            params.append(req.msg_lembrete_dia)
-
-        if not updates:
+        campos = {k: v for k, v in req.model_dump().items() if v is not None}
+        if not campos:
             raise HTTPException(status_code=400, detail="Nenhum campo para atualizar")
 
-        updates.append("updated_at = CURRENT_TIMESTAMP")
-        sql = f"UPDATE configuracao_sistema SET {', '.join(updates)} WHERE id_config = 1"
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("SELECT id_config FROM configuracao_sistema LIMIT 1")
+            config_existente = cur.fetchone()
 
-        with conn.cursor() as cur:
-            cur.execute(sql, params)
-            conn.commit()
-
-        # Auditoria
-        with conn.cursor() as acur:
-            acur.execute("""
-                INSERT INTO auditoria (id_registro, tabela, acao, id_usuario, dados_novos)
-                VALUES (%s, %s, %s, %s, %s::jsonb)
-            """, (1, 'configuracao_sistema', 'UPDATE_CONFIG', user.get("sub"),
-                  json.dumps(req.dict(exclude_none=True))))
-            conn.commit()
-
-        return {"status": "ok", "mensagem": "Configurações atualizadas com sucesso"}
+            if config_existente:
+                set_clause = ", ".join(f"{k} = %s" for k in campos)
+                cur.execute(
+                    f"UPDATE configuracao_sistema SET {set_clause} WHERE id_config = %s",
+                    list(campos.values()) + [config_existente["id_config"]]
+                )
+            else:
+                cols = ", ".join(campos.keys())
+                placeholders = ", ".join(["%s"] * len(campos))
+                cur.execute(
+                    f"INSERT INTO configuracao_sistema ({cols}) VALUES ({placeholders})",
+                    list(campos.values())
+                )
+        conn.commit()
+        return {"status": "success", "updated": list(campos.keys())}
     finally:
-        try:
-            conn.rollback()
-        except:
-            pass
-        try:
-            conn.rollback()
-        except:
-            pass
         db_pool.putconn(conn)
 
 
 # =========================================================
-# ENDPOINT: LISTAR MÉDICOS
+# ENDPOINTS: MÉDICOS
 # =========================================================
 @app.get("/api/admin/medicos")
 def listar_medicos(user=Depends(admin_auth)):
     conn = db_pool.getconn()
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("""
-                SELECT id_medico, nome, especialidade, crm, uf_crm,
-                       telefone, email, tempo_padrao_minutos, ativo,
-                       foto_base64
-                FROM medico
-                ORDER BY nome
-            """)
+            cur.execute("SELECT * FROM medico WHERE deleted_at IS NULL ORDER BY nome")
             medicos = cur.fetchall()
-        return {"medicos": medicos}
+        return {"medicos": [dict(m) for m in medicos]}
     finally:
-        try:
-            conn.rollback()
-        except:
-            pass
-        try:
-            conn.rollback()
-        except:
-            pass
         db_pool.putconn(conn)
 
-
-# =========================================================
-# ENDPOINT: CADASTRAR MÉDICO
-# =========================================================
 @app.post("/api/admin/medicos")
 def cadastrar_medico(req: NovoMedico, user=Depends(admin_auth)):
     conn = db_pool.getconn()
     try:
-        with conn.cursor() as cur:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute("""
                 INSERT INTO medico (nome, especialidade, crm, uf_crm, telefone, email, tempo_padrao_minutos)
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
                 RETURNING id_medico
-            """, (req.nome, req.especialidade, req.crm, req.uf_crm,
-                  req.telefone, req.email, req.tempo_padrao_minutos))
-            id_medico = cur.fetchone()[0]
-            conn.commit()
-        return {"status": "ok", "id_medico": id_medico}
+            """, (req.nome, req.especialidade, req.crm, req.uf_crm, req.telefone, req.email, req.tempo_padrao_minutos))
+            id_medico = cur.fetchone()["id_medico"]
+        conn.commit()
+        return {"status": "success", "id_medico": id_medico}
     except psycopg2.IntegrityError:
         conn.rollback()
-        raise HTTPException(status_code=409, detail="Médico com este CRM já cadastrado")
+        raise HTTPException(status_code=400, detail="CRM já cadastrado")
     finally:
-        try:
-            conn.rollback()
-        except:
-            pass
-        try:
-            conn.rollback()
-        except:
-            pass
         db_pool.putconn(conn)
-
-
-# =========================================================
-# ENDPOINT: UPLOAD DE FOTO DO MÉDICO
-# =========================================================
-class FotoMedico(BaseModel):
-    foto_base64: str  # "data:image/jpeg;base64,..."
 
 @app.put("/api/admin/medicos/{id_medico}/foto")
 def upload_foto_medico(id_medico: int, req: FotoMedico, user=Depends(admin_auth)):
     conn = db_pool.getconn()
     try:
-        # Valida tamanho (~500KB max em base64 ≈ 360KB de imagem)
         if len(req.foto_base64) > 700_000:
             raise HTTPException(status_code=413, detail="Imagem muito grande. Máximo: 500KB")
         with conn.cursor() as cur:
@@ -1099,89 +1080,7 @@ def upload_foto_medico(id_medico: int, req: FotoMedico, user=Depends(admin_auth)
 
 
 # =========================================================
-# ENDPOINT: STATS — AGENDAMENTOS POR DIA (últimos 7 + próx 7)
-# =========================================================
-@app.get("/api/admin/stats/agenda-semana")
-def stats_agenda_semana(user=Depends(admin_auth)):
-    conn = db_pool.getconn()
-    try:
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("""
-                SELECT
-                    DATE(d.inicio_datetime) AS dia,
-                    COUNT(c.id_consulta)    AS total
-                FROM disponibilidade d
-                LEFT JOIN consulta c
-                    ON c.id_disponibilidade = d.id_disponibilidade
-                    AND c.status NOT IN ('CANCELADA','FALTOU')
-                WHERE d.inicio_datetime BETWEEN CURRENT_DATE - INTERVAL '7 days'
-                                            AND CURRENT_DATE + INTERVAL '14 days'
-                GROUP BY DATE(d.inicio_datetime)
-                ORDER BY dia
-            """)
-            rows = cur.fetchall()
-        result = [{"dia": str(r["dia"]), "total": r["total"]} for r in rows]
-        return {"dados": result}
-    finally:
-        db_pool.putconn(conn)
-
-
-
-# =========================================================
-# ENDPOINT: LIBERAR AGENDA (criar disponibilidades)
-# =========================================================
-@app.post("/api/admin/agenda/liberar")
-def liberar_agenda(req: LiberarAgenda, user=Depends(admin_auth)):
-    conn = db_pool.getconn()
-    try:
-        criados = 0
-        erros = []
-        for i, slot in enumerate(req.slots):
-            inicio = slot.get("inicio")
-            fim = slot.get("fim")
-            if not inicio or not fim:
-                erros.append(f"Slot {i+1}: campos 'inicio' e 'fim' obrigatórios")
-                continue
-            try:
-                with conn.cursor() as cur:
-                    cur.execute("""
-                        INSERT INTO disponibilidade (id_medico, inicio_datetime, fim_datetime, status, origem)
-                        VALUES (%s, %s, %s, 'LIVRE', 'PAINEL_ADMIN')
-                        RETURNING id_disponibilidade
-                    """, (req.id_medico, inicio, fim))
-                    conn.commit()
-                    criados += 1
-            except psycopg2.IntegrityError as e:
-                conn.rollback()
-                erros.append(f"Slot {i+1}: conflito de horário — {str(e).split('DETAIL:')[0].strip()}")
-            except Exception as e:
-                conn.rollback()
-                erros.append(f"Slot {i+1}: {str(e)}")
-
-        # Auditoria
-        with conn.cursor() as acur:
-            acur.execute("""
-                INSERT INTO auditoria (id_registro, tabela, acao, id_usuario, dados_novos)
-                VALUES (%s, %s, %s, %s, %s::jsonb)
-            """, (req.id_medico, 'disponibilidade', 'LIBERAR_AGENDA', user.get("sub"),
-                  json.dumps({"slots_criados": criados, "erros": erros})))
-            conn.commit()
-
-        return {"status": "ok", "criados": criados, "erros": erros}
-    finally:
-        try:
-            conn.rollback()
-        except:
-            pass
-        try:
-            conn.rollback()
-        except:
-            pass
-        db_pool.putconn(conn)
-
-
-# =========================================================
-# ENDPOINT: LISTAR AGENDA (disponibilidades futuras)
+# ENDPOINTS: AGENDA
 # =========================================================
 @app.get("/api/admin/agenda")
 def listar_agenda(user=Depends(admin_auth)):
@@ -1189,234 +1088,109 @@ def listar_agenda(user=Depends(admin_auth)):
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute("""
-                SELECT d.id_disponibilidade, d.id_medico, m.nome AS medico_nome,
-                       m.especialidade, d.inicio_datetime, d.fim_datetime,
-                       d.status, d.origem,
-                       c.id_consulta, c.status AS status_consulta,
-                       p.id_paciente, p.nome AS paciente_nome, p.telefone AS paciente_telefone, p.cpf AS paciente_cpf
+                SELECT d.id_disponibilidade, d.inicio_datetime, d.fim_datetime,
+                       d.status, m.nome AS medico_nome, m.especialidade,
+                       c.id_consulta, c.status AS consulta_status,
+                       p.nome AS paciente_nome, p.telefone AS paciente_telefone
                 FROM disponibilidade d
                 JOIN medico m ON m.id_medico = d.id_medico
                 LEFT JOIN consulta c ON c.id_disponibilidade = d.id_disponibilidade
-                    AND c.status NOT IN ('CANCELADA', 'FALTOU')
+                    AND c.status NOT IN ('CANCELADA','FALTOU')
                 LEFT JOIN paciente p ON p.id_paciente = c.id_paciente
-                WHERE d.inicio_datetime >= CURRENT_DATE
+                WHERE d.inicio_datetime >= NOW() - INTERVAL '1 day'
                 ORDER BY d.inicio_datetime
+                LIMIT 200
             """)
             agenda = cur.fetchall()
-
-        # Serializa datas
-        for item in agenda:
-            for key in ["inicio_datetime", "fim_datetime"]:
-                if item.get(key):
-                    item[key] = item[key].isoformat()
-
-        return {"agenda": agenda}
+        result = []
+        for row in agenda:
+            r = dict(row)
+            for key in ['inicio_datetime', 'fim_datetime']:
+                if r.get(key):
+                    r[key] = r[key].isoformat()
+            result.append(r)
+        return {"agenda": result}
     finally:
-        try:
-            conn.rollback()
-        except:
-            pass
-        try:
-            conn.rollback()
-        except:
-            pass
         db_pool.putconn(conn)
 
-
-# =========================================================
-# ENDPOINT: MENSAGENS FORA DE HORÁRIO (fila humana)
-# =========================================================
-@app.get("/api/admin/mensagens-pendentes")
-def mensagens_pendentes(user=Depends(admin_auth)):
+@app.post("/api/admin/agenda/liberar")
+def liberar_agenda(req: LiberarAgenda, user=Depends(admin_auth)):
     conn = db_pool.getconn()
     try:
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("""
-                SELECT wm.id_log, wm.telefone_remetente, wm.mensagem,
-                       wm.created_at, p.nome AS paciente_nome,
-                       COALESCE(s.contexto_json->>'etapa', '') AS etapa_sessao
-                FROM whatsapp_mensagem wm
-                LEFT JOIN paciente p ON p.telefone = wm.telefone_remetente
-                LEFT JOIN sessao_chatbot s ON s.telefone = wm.telefone_remetente
-                WHERE wm.direcao = 'ENTRADA'
-                AND wm.created_at >= CURRENT_DATE
-                ORDER BY wm.created_at DESC
-                LIMIT 100
-            """)
-            mensagens = cur.fetchall()
-
-        for m in mensagens:
-            if m.get("created_at"):
-                m["created_at"] = m["created_at"].isoformat()
-
-        return {"mensagens": mensagens}
-    finally:
-        try:
-            conn.rollback()
-        except:
-            pass
-        try:
-            conn.rollback()
-        except:
-            pass
-        db_pool.putconn(conn)
-
-class ResolveAtendimento(BaseModel):
-    telefone: str
-
-@app.post("/api/admin/resolver-atendimento")
-def resolver_atendimento(req: ResolveAtendimento, user=Depends(admin_auth)):
-    conn = db_pool.getconn()
-    try:
+        criados = 0
         with conn.cursor() as cur:
-            cur.execute("""
-                UPDATE sessao_chatbot 
-                SET contexto_json = jsonb_set(COALESCE(contexto_json, '{}'::jsonb), '{etapa}', '"inicio"'), 
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE telefone = %s
-            """, (req.telefone,))
-            if cur.rowcount == 0:
-                raise HTTPException(status_code=404, detail="Sessão não encontrada para o telefone")
-            conn.commit()
-        return {"status": "success", "message": "Atendimento resolvido, bot reiniciado."}
+            for slot in req.slots:
+                try:
+                    cur.execute("""
+                        INSERT INTO disponibilidade (id_medico, inicio_datetime, fim_datetime, status)
+                        VALUES (%s, %s, %s, 'LIVRE')
+                    """, (req.id_medico, slot["inicio"], slot["fim"]))
+                    criados += 1
+                except psycopg2.IntegrityError:
+                    conn.rollback()
+        conn.commit()
+        return {"status": "success", "slots_criados": criados}
     finally:
         db_pool.putconn(conn)
 
 
 # =========================================================
-
-# =========================================================
-# ENDPOINTS: USUÁRIOS
-# =========================================================
-@app.get("/api/admin/usuarios")
-def listar_usuarios(user=Depends(admin_auth)):
-    conn = db_pool.getconn()
-    try:
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute("SELECT id_usuario, nome, login, perfil, ativo, created_at FROM usuario ORDER BY id_usuario")
-            usuarios = cur.fetchall()
-            for u in usuarios:
-                if u.get("created_at"): u["created_at"] = u["created_at"].isoformat()
-        return {"usuarios": usuarios}
-    finally:
-        db_pool.putconn(conn)
-
-class NovoUsuario(BaseModel):
-    nome: str
-    login: str
-    senha: str
-    perfil: str = 'recepcao'
-
-@app.post("/api/admin/usuarios")
-def cadastrar_usuario(req: NovoUsuario, user=Depends(admin_auth)):
-    if user.get("perfil") != "admin":
-        raise HTTPException(status_code=403, detail="Apenas admins podem criar usuários")
-        
-    conn = db_pool.getconn()
-    try:
-        senha_hash = hashlib.sha256(req.senha.encode()).hexdigest()
-        with conn.cursor() as cur:
-            cur.execute("SELECT 1 FROM usuario WHERE login = %s", (req.login,))
-            if cur.fetchone():
-                raise HTTPException(status_code=400, detail="Login já existe")
-                
-            cur.execute("""
-                INSERT INTO usuario (nome, login, senha_hash, perfil, ativo)
-                VALUES (%s, %s, %s, %s, TRUE)
-            """, (req.nome, req.login, senha_hash, req.perfil))
-            conn.commit()
-        return {"status": "success", "message": "Usuário criado"}
-    except psycopg2.IntegrityError:
-        conn.rollback()
-        raise HTTPException(status_code=400, detail="Login já existe")
-    finally:
-        db_pool.putconn(conn)
-
-class AlterarSenha(BaseModel):
-    id_usuario: int
-    nova_senha: str
-
-@app.post("/api/admin/usuarios/senha")
-def alterar_senha_usuario(req: AlterarSenha, user=Depends(admin_auth)):
-    if user.get("perfil") != "admin":
-        raise HTTPException(status_code=403, detail="Apenas admins podem alterar senhas")
-        
-    conn = db_pool.getconn()
-    try:
-        senha_hash = hashlib.sha256(req.nova_senha.encode()).hexdigest()
-        with conn.cursor() as cur:
-            cur.execute("UPDATE usuario SET senha_hash = %s WHERE id_usuario = %s", (senha_hash, req.id_usuario))
-            conn.commit()
-        return {"status": "success"}
-    finally:
-        db_pool.putconn(conn)
-
-# ENDPOINT: LISTAR CONSULTAS (com filtro de data)
+# ENDPOINTS: CONSULTAS
 # =========================================================
 @app.get("/api/admin/consultas")
-def get_consultas(data_inicio: Optional[str] = None, data_fim: Optional[str] = None, user=Depends(admin_auth)):
+def listar_consultas(user=Depends(admin_auth)):
     conn = db_pool.getconn()
     try:
-        # Define janela de datas
-        if data_inicio:
-            dt_inicio = datetime.fromisoformat(data_inicio)
-        else:
-            dt_inicio = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-
-        if data_fim:
-            dt_fim = datetime.fromisoformat(data_fim).replace(hour=23, minute=59, second=59)
-        else:
-            dt_fim = dt_inicio.replace(hour=23, minute=59, second=59) + __import__('datetime').timedelta(days=90)
-
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute("""
-                SELECT
-                    c.id_consulta,
-                    c.status,
-                    p.id_paciente,
-                    p.nome  AS paciente_nome,
-                    p.telefone AS paciente_telefone,
-                    p.cpf   AS paciente_cpf,
-                    d.inicio_datetime AS inicio,
-                    d.fim_datetime    AS fim,
-                    m.nome  AS medico_nome,
-                    m.especialidade
+                SELECT c.id_consulta, c.status, c.lembrete_24h_enviado, c.lembrete_dia_enviado,
+                       p.nome AS paciente_nome, p.telefone,
+                       m.nome AS medico_nome, m.especialidade,
+                       d.inicio_datetime, d.fim_datetime
                 FROM consulta c
-                JOIN paciente p      ON c.id_paciente       = p.id_paciente
-                JOIN disponibilidade d ON c.id_disponibilidade = d.id_disponibilidade
-                JOIN medico m         ON d.id_medico          = m.id_medico
-                WHERE c.status NOT IN ('CANCELADA','CANCELADA','FALTOU')
-                  AND d.inicio_datetime BETWEEN %s AND %s
-                ORDER BY d.inicio_datetime ASC
-            """, (dt_inicio, dt_fim))
+                JOIN disponibilidade d ON d.id_disponibilidade = c.id_disponibilidade
+                JOIN paciente p ON p.id_paciente = c.id_paciente
+                JOIN medico m ON m.id_medico = d.id_medico
+                WHERE d.inicio_datetime >= NOW() - INTERVAL '7 days'
+                ORDER BY d.inicio_datetime DESC
+                LIMIT 100
+            """)
             consultas = cur.fetchall()
-
-        for c in consultas:
-            if c["inicio"]: c["inicio"] = c["inicio"].isoformat()
-            if c["fim"]:    c["fim"]    = c["fim"].isoformat()
-
-        return {"consultas": consultas}
-    except Exception as e:
-        logger.error(f"Erro ao buscar consultas: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        result = []
+        for row in consultas:
+            r = dict(row)
+            for key in ['inicio_datetime', 'fim_datetime']:
+                if r.get(key):
+                    r[key] = r[key].isoformat()
+            result.append(r)
+        return {"consultas": result}
     finally:
         db_pool.putconn(conn)
 
-
-# =========================================================
-# ENDPOINT: AGENDAMENTO MANUAL PELO PAINEL
-# =========================================================
-class AgendamentoManual(BaseModel):
-    id_disponibilidade: int
-    cpf: Optional[str] = None
-    telefone: Optional[str] = None
-    nome_paciente: Optional[str] = None
+@app.patch("/api/admin/consultas/{id_consulta}/status")
+def atualizar_status_consulta(id_consulta: int, body: dict = Body(...), user=Depends(admin_auth)):
+    conn = db_pool.getconn()
+    try:
+        novo_status = body.get("status")
+        status_validos = ['AGENDADA', 'CONFIRMADA', 'CANCELADA', 'REALIZADA', 'FALTOU']
+        if novo_status not in status_validos:
+            raise HTTPException(status_code=400, detail=f"Status inválido. Use: {status_validos}")
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE consulta SET status = %s WHERE id_consulta = %s",
+                (novo_status, id_consulta)
+            )
+            if cur.rowcount == 0:
+                raise HTTPException(status_code=404, detail="Consulta não encontrada")
+        conn.commit()
+        return {"status": "success", "novo_status": novo_status}
+    finally:
+        db_pool.putconn(conn)
 
 @app.post("/api/admin/consultas/manual")
 def agendar_manual(req: AgendamentoManual, user=Depends(admin_auth)):
     conn = db_pool.getconn()
     try:
-        # 1. Verificar disponibilidade
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute("""
                 SELECT d.id_disponibilidade, d.status, d.inicio_datetime
@@ -1432,12 +1206,11 @@ def agendar_manual(req: AgendamentoManual, user=Depends(admin_auth)):
         with conn.cursor() as cur:
             cur.execute("""
                 SELECT 1 FROM consulta
-                WHERE id_disponibilidade = %s AND status NOT IN ('CANCELADA','CANCELADA','FALTOU')
+                WHERE id_disponibilidade = %s AND status NOT IN ('CANCELADA', 'FALTOU')
             """, (req.id_disponibilidade,))
             if cur.fetchone():
                 raise HTTPException(status_code=409, detail="Horário já ocupado")
 
-        # 2. Localizar ou criar paciente
         id_paciente = None
         if req.cpf:
             digits = re.sub(r"\D", "", req.cpf)
@@ -1459,11 +1232,10 @@ def agendar_manual(req: AgendamentoManual, user=Depends(admin_auth)):
                     id_paciente = res[0]
 
         if not id_paciente:
-            # Cria paciente novo
             if not req.nome_paciente:
                 raise HTTPException(status_code=422, detail="Paciente não encontrado. Informe o nome para cadastrar.")
-            cpf_val   = re.sub(r"\D", "", req.cpf or "")
-            tel_val   = re.sub(r"\D", "", req.telefone or "")
+            cpf_val = re.sub(r"\D", "", req.cpf or "")
+            tel_val = re.sub(r"\D", "", req.telefone or "")
             with conn.cursor() as cur:
                 cur.execute("""
                     INSERT INTO paciente (nome, cpf, telefone, aceite_lgpd, data_aceite_lgpd)
@@ -1473,7 +1245,6 @@ def agendar_manual(req: AgendamentoManual, user=Depends(admin_auth)):
                 id_paciente = cur.fetchone()[0]
                 conn.commit()
 
-        # 3. Criar consulta
         with conn.cursor() as cur:
             cur.execute("""
                 INSERT INTO consulta (id_paciente, id_disponibilidade, status)
@@ -1495,10 +1266,6 @@ def agendar_manual(req: AgendamentoManual, user=Depends(admin_auth)):
     finally:
         db_pool.putconn(conn)
 
-
-# =========================================================
-# ENDPOINT: CANCELAR CONSULTA
-# =========================================================
 @app.put("/api/admin/consultas/{id_consulta}/cancelar")
 def cancelar_consulta_admin(id_consulta: int, user=Depends(admin_auth)):
     conn = db_pool.getconn()
@@ -1508,13 +1275,10 @@ def cancelar_consulta_admin(id_consulta: int, user=Depends(admin_auth)):
             res = cur.fetchone()
             if not res:
                 raise HTTPException(status_code=404, detail="Consulta não encontrada")
-                
             id_disp = res[0]
-            
             cur.execute("UPDATE consulta SET status = 'CANCELADA' WHERE id_consulta = %s", (id_consulta,))
             cur.execute("UPDATE disponibilidade SET status = 'LIVRE' WHERE id_disponibilidade = %s", (id_disp,))
             conn.commit()
-            
         return {"sucesso": True}
     except HTTPException:
         conn.rollback()
@@ -1527,8 +1291,33 @@ def cancelar_consulta_admin(id_consulta: int, user=Depends(admin_auth)):
 
 
 # =========================================================
-# ENDPOINT: HISTÓRICO DO PACIENTE
+# ENDPOINTS: PACIENTES
 # =========================================================
+@app.get("/api/admin/pacientes")
+def listar_pacientes(user=Depends(admin_auth)):
+    conn = db_pool.getconn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT id_paciente, nome, telefone, cpf, email, nascimento,
+                       aceite_lgpd, created_at
+                FROM paciente
+                WHERE deleted_at IS NULL
+                ORDER BY nome
+                LIMIT 500
+            """)
+            pacientes = cur.fetchall()
+        result = []
+        for row in pacientes:
+            r = dict(row)
+            for key in ['nascimento', 'created_at']:
+                if r.get(key):
+                    r[key] = r[key].isoformat()
+            result.append(r)
+        return {"pacientes": result}
+    finally:
+        db_pool.putconn(conn)
+
 @app.get("/api/admin/pacientes/{id_paciente}/historico")
 def get_historico_paciente(id_paciente: int, user=Depends(admin_auth)):
     conn = db_pool.getconn()
@@ -1537,28 +1326,163 @@ def get_historico_paciente(id_paciente: int, user=Depends(admin_auth)):
             cur.execute("""
                 SELECT 
                     c.id_consulta, c.status,
-                    d.data_hora_inicio as inicio,
+                    d.inicio_datetime as inicio,
                     m.nome as medico_nome
                 FROM consulta c
                 JOIN disponibilidade d ON c.id_disponibilidade = d.id_disponibilidade
                 JOIN medico m ON d.id_medico = m.id_medico
                 WHERE c.id_paciente = %s
-                ORDER BY d.data_hora_inicio DESC
+                ORDER BY d.inicio_datetime DESC
             """, (id_paciente,))
             hist = cur.fetchall()
             for h in hist:
-                if h["inicio"]: h["inicio"] = h["inicio"].isoformat()
+                if h["inicio"]:
+                    h["inicio"] = h["inicio"].isoformat()
         return {"historico": hist}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         db_pool.putconn(conn)
 
+
 # =========================================================
-# ENDPOINT: DADOS GRÁFICO (Chart.js)
+# ENDPOINTS: MENSAGENS WHATSAPP
 # =========================================================
+@app.get("/api/admin/mensagens")
+def listar_mensagens(user=Depends(admin_auth)):
+    conn = db_pool.getconn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT id_mensagem, telefone_remetente, mensagem, direcao,
+                       status_envio, created_at
+                FROM whatsapp_mensagem
+                ORDER BY created_at DESC
+                LIMIT 200
+            """)
+            msgs = cur.fetchall()
+        result = []
+        for row in msgs:
+            r = dict(row)
+            if r.get('created_at'):
+                r['created_at'] = r['created_at'].isoformat()
+            result.append(r)
+        return {"mensagens": result}
+    finally:
+        db_pool.putconn(conn)
+
+
+# =========================================================
+# ENDPOINTS: USUÁRIOS
+# =========================================================
+@app.get("/api/admin/usuarios")
+def listar_usuarios(user=Depends(admin_auth)):
+    conn = db_pool.getconn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("SELECT id_usuario, nome, login, perfil, ativo, created_at FROM usuario ORDER BY id_usuario")
+            usuarios = cur.fetchall()
+            for u in usuarios:
+                if u.get("created_at"):
+                    u["created_at"] = u["created_at"].isoformat()
+        return {"usuarios": usuarios}
+    finally:
+        db_pool.putconn(conn)
+
+@app.post("/api/admin/usuarios")
+def cadastrar_usuario(req: NovoUsuario, user=Depends(admin_auth)):
+    if user.get("perfil") != "admin":
+        raise HTTPException(status_code=403, detail="Apenas admins podem criar usuários")
+
+    # Validação de força de senha
+    validar_forca_senha(req.senha)
+
+    conn = db_pool.getconn()
+    try:
+        senha_hash = bcrypt.hashpw(req.senha.encode(), bcrypt.gensalt()).decode()
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM usuario WHERE login = %s", (req.login,))
+            if cur.fetchone():
+                raise HTTPException(status_code=400, detail="Login já existe")
+                
+            cur.execute("""
+                INSERT INTO usuario (nome, login, senha_hash, perfil, ativo)
+                VALUES (%s, %s, %s, %s, TRUE)
+            """, (req.nome, req.login, senha_hash, req.perfil))
+            conn.commit()
+        return {"status": "success", "message": "Usuário criado"}
+    except psycopg2.IntegrityError:
+        conn.rollback()
+        raise HTTPException(status_code=400, detail="Login já existe")
+    finally:
+        db_pool.putconn(conn)
+
+@app.post("/api/admin/usuarios/senha")
+def alterar_senha_usuario(req: AlterarSenha, user=Depends(admin_auth)):
+    if user.get("perfil") != "admin":
+        raise HTTPException(status_code=403, detail="Apenas admins podem alterar senhas")
+
+    # Validação de força de senha
+    validar_forca_senha(req.nova_senha)
+
+    conn = db_pool.getconn()
+    try:
+        senha_hash = bcrypt.hashpw(req.nova_senha.encode(), bcrypt.gensalt()).decode()
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE usuario SET senha_hash = %s WHERE id_usuario = %s",
+                (senha_hash, req.id_usuario)
+            )
+            conn.commit()
+        return {"status": "success", "message": "Senha alterada"}
+    finally:
+        db_pool.putconn(conn)
+
+@app.get("/api/admin/mensagens-pendentes")
+def mensagens_pendentes(user=Depends(admin_auth)):
+    conn = db_pool.getconn()
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("""
+                SELECT wm.id_log, wm.telefone_remetente, wm.mensagem,
+                       wm.created_at, p.nome AS paciente_nome,
+                       COALESCE(s.contexto_json->>'etapa', '') AS etapa_sessao
+                FROM whatsapp_mensagem wm
+                LEFT JOIN paciente p ON p.telefone = wm.telefone_remetente
+                LEFT JOIN sessao_chatbot s ON s.telefone = wm.telefone_remetente
+                WHERE wm.direcao = 'ENTRADA'
+                AND wm.created_at >= CURRENT_DATE
+                ORDER BY wm.created_at DESC
+                LIMIT 100
+            """)
+            mensagens = cur.fetchall()
+        for m in mensagens:
+            if m.get("created_at"):
+                m["created_at"] = m["created_at"].isoformat()
+        return {"mensagens": mensagens}
+    finally:
+        db_pool.putconn(conn)
+
+@app.post("/api/admin/resolver-atendimento")
+def resolver_atendimento(req: ResolveAtendimento, user=Depends(admin_auth)):
+    conn = db_pool.getconn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                UPDATE sessao_chatbot 
+                SET contexto_json = jsonb_set(COALESCE(contexto_json, '{}'::jsonb), '{etapa}', '"inicio"'), 
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE telefone = %s
+            """, (req.telefone,))
+            if cur.rowcount == 0:
+                raise HTTPException(status_code=404, detail="Sessão não encontrada para o telefone")
+            conn.commit()
+        return {"status": "success", "message": "Atendimento resolvido, bot reiniciado."}
+    finally:
+        db_pool.putconn(conn)
+
 @app.get("/api/admin/stats/agenda-semana")
-def get_stats_agenda_semana():
+def get_stats_agenda_semana(user=Depends(admin_auth)):
     conn = db_pool.getconn()
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
@@ -1572,23 +1496,21 @@ def get_stats_agenda_semana():
                     to_char(dates.dia, 'YYYY-MM-DD') as dia,
                     count(c.id_consulta) as total
                 FROM dates
-                LEFT JOIN disponibilidade d ON to_char(d.data_hora_inicio, 'YYYY-MM-DD') = to_char(dates.dia, 'YYYY-MM-DD')
-                LEFT JOIN consulta c ON c.id_disponibilidade = d.id_disponibilidade AND c.status NOT IN ('CANCELADA', 'CANCELADA')
+                LEFT JOIN disponibilidade d ON to_char(d.inicio_datetime, 'YYYY-MM-DD') = to_char(dates.dia, 'YYYY-MM-DD')
+                LEFT JOIN consulta c ON c.id_disponibilidade = d.id_disponibilidade AND c.status NOT IN ('CANCELADA', 'FALTOU')
                 GROUP BY dates.dia
                 ORDER BY dates.dia ASC
             """)
             dados = cur.fetchall()
         return {"dados": dados}
     except Exception as e:
+        logger.error(f"Erro ao buscar estatísticas da semana: {e}")
         return {"dados": []}
     finally:
         db_pool.putconn(conn)
 
-# =========================================================
-# ENDPOINTS: EVOLUTION API (WHATSAPP CONNECTION)
-# =========================================================
 @app.get("/api/admin/whatsapp/status")
-def whatsapp_status():
+def whatsapp_status(user=Depends(admin_auth)):
     try:
         headers = {"apikey": EVOLUTION_API_KEY}
         r = requests.get(f"{EVOLUTION_API_URL}/instance/fetchInstances", headers=headers, timeout=5)
@@ -1615,7 +1537,7 @@ def whatsapp_status():
         return {"status": "erro", "message": str(e)}
 
 @app.get("/api/admin/whatsapp/qrcode")
-def whatsapp_qrcode(instance: str = "bot"):
+def whatsapp_qrcode(instance: str = "bot", user=Depends(admin_auth)):
     try:
         headers = {"apikey": EVOLUTION_API_KEY}
         r = requests.get(f"{EVOLUTION_API_URL}/instance/connect/{instance}", headers=headers, timeout=5)
@@ -1626,7 +1548,7 @@ def whatsapp_qrcode(instance: str = "bot"):
         return {"error": str(e)}
 
 @app.post("/api/admin/whatsapp/logout")
-def whatsapp_logout(instance: str = "bot"):
+def whatsapp_logout(instance: str = "bot", user=Depends(admin_auth)):
     try:
         headers = {"apikey": EVOLUTION_API_KEY}
         r = requests.delete(f"{EVOLUTION_API_URL}/instance/logout/{instance}", headers=headers, timeout=5)
